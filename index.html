@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dakbox Ops</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Ops console: dense, dark sidebar-free top bar, tables first. */
+:root{
+  --bg:#EEF0F4; --surface:#FFFFFF; --ink:#111827; --muted:#5E6675; --line:#D8DCE3;
+  --nav:#0F172A; --nav-ink:#E5E9F0; --accent:#2563EB; --accent-soft:#E3ECFD;
+  --ok:#15803D; --ok-soft:#DCF2E3; --warn:#A16207; --warn-soft:#FBF0D3; --err:#B91C1C; --err-soft:#FBE4E4;
+  --f-body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif; --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body)}
+.top{position:sticky;top:0;z-index:1000;background:var(--nav);color:var(--nav-ink)}
+.top .in{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding-block:10px}
+.in{max-width:1280px;margin:0 auto;padding:0 16px}
+.brand{font-weight:700;font-size:16px;letter-spacing:.02em}
+.brand small{font-weight:500;opacity:.6;margin-left:6px}
+.tabs{display:flex;gap:2px;flex-wrap:wrap}
+.tabs button{background:none;border:0;color:var(--nav-ink);opacity:.7;font:500 14px var(--f-body);padding:7px 12px;border-radius:6px;cursor:pointer}
+.tabs button.on{opacity:1;background:rgba(255,255,255,.12)}
+.who{margin-left:auto;display:flex;gap:10px;align-items:center;font-size:13px;opacity:.85}
+main.in{padding-block:20px 60px;display:flex;flex-direction:column;gap:16px}
+h1{font-size:20px;margin:0} h2{font-size:15px;margin:0}
+.muted{color:var(--muted)} .mono{font-family:var(--f-mono);font-size:12.5px}
+.btn{font:600 13px var(--f-body);border:0;border-radius:6px;padding:8px 12px;cursor:pointer;background:var(--accent);color:#fff;white-space:nowrap}
+.btn.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+input,select{font:14px var(--f-body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 9px;min-width:0}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.bar label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+.stat b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.tw{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:auto;max-height:620px}
+table{border-collapse:collapse;width:100%;min-width:900px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{position:sticky;top:0;background:#F6F7F9;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;z-index:1}
+td select{padding:4px 6px;font-size:13px}
+.tag{font-size:11px;font-weight:600;padding:2px 7px;border-radius:4px;white-space:nowrap;background:#ECEEF2;color:var(--muted)}
+.tag.ok{background:var(--ok-soft);color:var(--ok)} .tag.warn{background:var(--warn-soft);color:var(--warn)} .tag.bad{background:var(--err-soft);color:var(--err)} .tag.blue{background:var(--accent-soft);color:var(--accent)}
+#dmap{height:440px;border-radius:8px;border:1px solid var(--line)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px}
+pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12px;overflow:auto;font:12.5px var(--f-mono);margin:0}
+.login{max-width:380px;margin:12vh auto;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:24px;display:flex;flex-direction:column;gap:12px}
+.login label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.err{color:var(--err);font-size:13px}
+.banner{border-radius:8px;padding:10px 14px;background:var(--warn-soft)}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--nav);color:#fff;padding:9px 14px;border-radius:8px;z-index:2000}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div id="setup" class="login" hidden><h1>Not connected</h1><p>Fill in <b>config.js</b> with your Supabase URL and anon key, then reload.</p></div>
+
+<form id="login" class="login" hidden>
+  <h1>Dakbox Ops</h1><p class="muted">Staff sign-in</p>
+  <label>Email<input id="email" type="email" autocomplete="username" required></label>
+  <label>Password<input id="pw" type="password" autocomplete="current-password" required></label>
+  <button class="btn" type="submit">Sign in</button>
+  <p class="err" id="loginErr" role="alert"></p>
+</form>
+
+<div id="app" hidden>
+<header class="top"><div class="in">
+  <span class="brand">Dakbox<small>Operations</small></span>
+  <nav class="tabs" id="tabs">
+    <button data-v="orders" class="on">Orders</button><button data-v="dispatch">Dispatch</button><button data-v="trucks">Trucks</button><button data-v="gps">GPS</button>
+  </nav>
+  <div class="who"><span id="whoEmail"></span><button class="btn ghost" id="logout" type="button">Sign out</button></div>
+</div></header>
+
+<main class="in">
+  <!-- ORDERS -->
+  <section id="v-orders" style="display:flex;flex-direction:column;gap:14px">
+    <div class="stats" id="oStats"></div>
+    <div class="bar">
+      <label>Status<select id="oStatus"><option value="">All</option></select></label>
+      <label>Search<input id="oSearch" placeholder="AWB, phone, name or pincode" style="width:260px"></label>
+      <span class="muted" id="oCount"></span>
+    </div>
+    <div class="tw"><table>
+      <thead><tr><th>AWB</th><th>Booked</th><th>Sender</th><th>Pickup</th><th>Delivery</th><th>Weight</th><th>Total</th><th>Status</th><th>Truck</th></tr></thead>
+      <tbody id="oBody"><tr><td colspan="9" class="muted">Loading orders…</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <!-- DISPATCH -->
+  <section id="v-dispatch" hidden style="display:flex;flex-direction:column;gap:14px">
+    <div class="bar">
+      <label>Max distance (km)<input id="dKm" type="number" min="1" max="300" style="width:110px"></label>
+      <label>GPS newer than (min)<input id="dFresh" type="number" min="1" max="600" style="width:110px"></label>
+      <button class="btn ghost" id="dSuggest" type="button">Refresh suggestions</button>
+      <button class="btn" id="dConfirm" type="button" disabled>Confirm allocation</button>
+      <button class="btn ghost" id="dSave" type="button">Save as default</button>
+      <label>Zoom to<select id="dArea"><option value="">Everything</option><option value="28.60,77.15,11">Delhi NCR</option><option value="19.08,72.90,11">Mumbai</option><option value="18.52,73.86,12">Pune</option><option value="12.97,77.59,11">Bengaluru</option></select></label>
+    </div>
+    <div class="stats" id="dStats"></div>
+    <div id="dmap"></div>
+    <div class="legend"><span><i style="background:var(--accent)"></i>Truck ready</span><span><i style="background:#9AA3B2"></i>Truck not usable (old GPS, full, off duty)</span><span><i style="background:#F2A516"></i>Pickup with a suggested truck</span><span><i style="background:var(--err)"></i>Pickup with no truck</span><span>Dashed line: suggestion</span></div>
+    <div class="tw"><table>
+      <thead><tr><th>AWB</th><th>Pickup pincode</th><th>Location</th><th>Weight</th><th>Suggested truck</th><th>Distance</th><th>Why</th></tr></thead>
+      <tbody id="dBody"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <!-- TRUCKS -->
+  <section id="v-trucks" hidden style="display:flex;flex-direction:column;gap:14px">
+    <form class="bar card" id="addTruck" style="flex-direction:row">
+      <label>Truck no.<input id="tNo" placeholder="DL01AB1234" maxlength="12" required></label>
+      <label>Driver<input id="tDriver" required></label>
+      <label>Driver mobile<input id="tPhone" maxlength="10"></label>
+      <label>Capacity (kg)<input id="tCap" type="number" min="50" max="40000" value="1500" style="width:110px"></label>
+      <label>GPS device ID (IMEI)<input id="tImei"></label>
+      <label>Now near pincode<input id="tPin" inputmode="numeric" maxlength="6" style="width:110px" placeholder="optional"></label>
+      <button class="btn" type="submit">Add truck</button>
+      <p class="err" id="tErr" style="flex-basis:100%;margin:0"></p>
+    </form>
+    <div class="tw"><table>
+      <thead><tr><th>Truck</th><th>Driver</th><th>Capacity</th><th>Loaded</th><th>Status</th><th>GPS device</th><th>Last GPS</th><th>Speed</th><th></th></tr></thead>
+      <tbody id="tBody"><tr><td colspan="9" class="muted">Loading trucks…</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <!-- GPS -->
+  <section id="v-gps" hidden style="display:flex;flex-direction:column;gap:14px">
+    <div class="card">
+      <h2>Test without real trackers</h2>
+      <p>Sends one made-up GPS position for every truck, moved 0.3 to 1.8 km from its last spot. Off-duty trucks stay put. Saved with source "simulated".</p>
+      <div><button class="btn" id="sim" type="button">Simulate one GPS ping per truck</button></div>
+    </div>
+    <div class="card">
+      <h2>Connect real trackers</h2>
+      <p>Give your GPS vendor this address and key. They send each position as it arrives. Each truck needs its device ID (IMEI) filled in on the Trucks tab.</p>
+      <pre id="ingestUrl"></pre>
+      <pre>POST, header  x-ingest-key: &lt;your INGEST_KEY&gt;
+{ "device_id": "868123045678901", "lat": 28.545, "lon": 77.273,
+  "speed_kmph": 18, "time": "2026-11-10T09:42:10+05:30" }</pre>
+      <p class="muted">If a vendor can't push, ask for their "last location" API and pull it every minute with a scheduled job that posts to the same address.</p>
+    </div>
+    <div class="card"><h2>Latest pings</h2><div class="tw" style="max-height:360px"><table style="min-width:600px">
+      <thead><tr><th>Truck</th><th>Time</th><th>Lat, lon</th><th>Speed</th><th>Source</th><th>Flag</th></tr></thead>
+      <tbody id="pBody"></tbody></table></div></div>
+  </section>
+</main>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const inr=n=>"₹"+Number(n).toLocaleString("en-IN");
+const ago=t=>{if(!t)return"never";const m=Math.round((Date.now()-Date.parse(t))/60000);return m<1?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"};
+const toast=m=>{const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,2600)};
+const STATUS={booked:"Booked",pickup_assigned:"Pickup assigned",picked_up:"Picked up",at_origin_hub:"At origin hub",in_transit:"In transit",at_destination_hub:"At destination hub",out_for_delivery:"Out for delivery",delivered:"Delivered",cancelled:"Cancelled"};
+const cfg=window.DAKBOX||{};
+const sb=cfg.SUPABASE_URL&&cfg.SUPABASE_ANON_KEY?supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY):null;
+const S={orders:[],trucks:[],settings:{max_distance_km:25,gps_fresh_minutes:15},suggest:[],view:"orders",started:false};
+
+// ---------- auth
+async function boot(){
+  if(!sb){$("setup").hidden=false;return}
+  const {data:{session}}=await sb.auth.getSession();
+  if(session)start(session); else $("login").hidden=false;
+  sb.auth.onAuthStateChange((ev,s)=>{if(ev==="SIGNED_OUT"){location.reload()}});
+}
+$("login").addEventListener("submit",async e=>{
+  e.preventDefault();$("loginErr").textContent="";
+  const {data,error}=await sb.auth.signInWithPassword({email:$("email").value.trim(),password:$("pw").value});
+  if(error){$("loginErr").textContent="Wrong email or password.";return}
+  $("login").hidden=true;start(data.session);
+});
+$("logout").addEventListener("click",()=>sb.auth.signOut());
+
+// ---------- data
+async function loadOrders(){const {data,error}=await sb.from("orders").select("*").order("created_at",{ascending:false}).limit(500);if(!error){S.orders=data;renderOrders();}}
+async function loadTrucks(){const {data,error}=await sb.from("trucks").select("*").order("truck_no");if(!error){S.trucks=data;renderTrucks();}}
+async function loadSettings(){const {data}=await sb.from("settings").select("*").eq("id",1).maybeSingle();if(data)S.settings=data;$("dKm").value=S.settings.max_distance_km;$("dFresh").value=S.settings.gps_fresh_minutes}
+async function loadSuggest(){
+  const {data,error}=await sb.rpc("suggest_allocations",{p_max_km:+$("dKm").value||null,p_fresh_min:+$("dFresh").value||null});
+  if(error){toast(error.message);return}
+  S.suggest=data||[];renderDispatch();
+}
+async function loadPings(){const {data}=await sb.from("gps_pings").select("*").order("received_at",{ascending:false}).limit(100);
+  $("pBody").innerHTML=(data||[]).map(p=>`<tr><td class="mono">${esc(p.truck_no)}</td><td>${new Date(p.recorded_at).toLocaleString("en-IN")}</td><td class="mono">${(+p.lat).toFixed(5)}, ${(+p.lon).toFixed(5)}</td><td>${p.speed_kmph??"—"}</td><td>${esc(p.source)}</td><td>${p.flag?`<span class="tag bad">${esc(p.flag)}</span>`:""}</td></tr>`).join("")||'<tr><td colspan="6" class="muted">No pings yet.</td></tr>'}
+
+async function start(session){
+  if(S.started)return;S.started=true;
+  $("app").hidden=false;$("whoEmail").textContent=session.user.email;
+  $("ingestUrl").textContent=cfg.SUPABASE_URL.replace(/\/$/,"")+"/functions/v1/gps-ingest";
+  $("oStatus").innerHTML='<option value="">All</option>'+Object.entries(STATUS).map(([k,v])=>`<option value="${k}">${v}</option>`).join("");
+  await loadSettings();
+  await Promise.all([loadOrders(),loadTrucks()]);
+  // Live updates: any change to orders or trucks refreshes the screen.
+  let t1,t2;
+  sb.channel("ops").on("postgres_changes",{event:"*",schema:"public",table:"orders"},()=>{clearTimeout(t1);t1=setTimeout(async()=>{await loadOrders();if(S.view==="dispatch")loadSuggest()},400)})
+    .on("postgres_changes",{event:"*",schema:"public",table:"trucks"},()=>{clearTimeout(t2);t2=setTimeout(async()=>{await loadTrucks();if(S.view==="dispatch")loadSuggest()},400)}).subscribe();
+  setInterval(()=>{renderTrucks();if(S.view==="dispatch")loadSuggest()},60000); // GPS age moves on
+}
+
+// ---------- tabs
+$("tabs").addEventListener("click",e=>{const v=e.target.dataset.v;if(!v)return;S.view=v;
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));
+  ["orders","dispatch","trucks","gps"].forEach(x=>$("v-"+x).hidden=x!==v);
+  if(v==="dispatch"){initMap();setTimeout(()=>map.invalidateSize(),50);loadSuggest()}
+  if(v==="gps")loadPings();
+});
+
+// ---------- orders
+function renderOrders(){
+  const f=$("oStatus").value,q=$("oSearch").value.trim().toLowerCase();
+  const rows=S.orders.filter(o=>(!f||o.status===f)&&(!q||[o.awb,o.sender_phone,o.receiver_phone,o.sender_name,o.receiver_name,o.pickup_pincode,o.delivery_pincode].join(" ").toLowerCase().includes(q)));
+  const open=S.orders.filter(o=>!["delivered","cancelled"].includes(o.status));
+  $("oStats").innerHTML=`<div class="stat"><span class="muted">Orders (latest 500)</span><b>${S.orders.length}</b></div><div class="stat"><span class="muted">Waiting for pickup truck</span><b>${S.orders.filter(o=>o.status==="booked").length}</b></div><div class="stat"><span class="muted">Open (not delivered)</span><b>${open.length}</b></div><div class="stat"><span class="muted">Booked value</span><b>${inr(S.orders.filter(o=>o.status!=="cancelled").reduce((s,o)=>s+ +o.total,0))}</b></div>`;
+  $("oCount").textContent=rows.length+" shown";
+  $("oBody").innerHTML=rows.map(o=>`<tr>
+    <td class="mono">${esc(o.awb)}</td><td>${new Date(o.created_at).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</td>
+    <td>${esc(o.sender_name)}<div class="muted mono">${esc(o.sender_phone)}</div></td>
+    <td>${esc(o.pickup_pincode)}<div class="muted" style="font-size:12px;max-width:220px">${esc(o.pickup_address)}</div></td>
+    <td>${esc(o.delivery_pincode)}<div class="muted" style="font-size:12px">${esc(o.receiver_name)}</div></td>
+    <td>${o.charged_kg} kg</td><td>${inr(o.total)}</td>
+    <td><select data-awb="${esc(o.awb)}" aria-label="Status of ${esc(o.awb)}">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}"${k===o.status?" selected":""}>${v}</option>`).join("")}</select></td>
+    <td class="mono">${esc(o.truck_no||"—")}</td></tr>`).join("")||'<tr><td colspan="9" class="muted">No orders match. New bookings from the customer site appear here automatically.</td></tr>';
+}
+$("oStatus").addEventListener("change",renderOrders);$("oSearch").addEventListener("input",renderOrders);
+$("oBody").addEventListener("change",async e=>{const awb=e.target.dataset.awb;if(!awb)return;
+  const {error}=await sb.rpc("set_order_status",{p_awb:awb,p_status:e.target.value,p_note:"Changed in ops"});
+  toast(error?error.message:"Saved "+awb);if(error)loadOrders()});
+
+// ---------- dispatch (free map: Leaflet + OpenStreetMap)
+let map=null,layer=null;
+function initMap(){if(map)return;
+  map=L.map("dmap").setView([22.5,79],5);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
+  layer=L.layerGroup().addTo(map);
+}
+let fitted=false;
+function renderDispatch(){
+  const fresh=(+$("dFresh").value||15)*60000, now=Date.now();
+  const usable=t=>t.status==="available"&&t.last_ping_at&&now-Date.parse(t.last_ping_at)<=fresh&&+t.load_kg<+t.capacity_kg;
+  const byAwb=new Map(S.orders.map(o=>[o.awb,o])), byTruck=new Map(S.trucks.map(t=>[t.truck_no,t]));
+  const ok=S.suggest.filter(s=>s.truck_no);
+  $("dStats").innerHTML=`<div class="stat"><span class="muted">Waiting for pickup</span><b>${S.suggest.length}</b></div><div class="stat"><span class="muted">Can allocate now</span><b>${ok.length}</b></div><div class="stat"><span class="muted">Trucks ready</span><b>${S.trucks.filter(usable).length} / ${S.trucks.length}</b></div>`;
+  $("dConfirm").disabled=!ok.length;$("dConfirm").textContent=ok.length?`Confirm ${ok.length} allocation${ok.length>1?"s":""}`:"Nothing to allocate";
+  $("dBody").innerHTML=S.suggest.map(s=>{const o=byAwb.get(s.awb)||{};
+    const loc=o.pickup_location_source==="map_pin"?'<span class="tag ok">Map pin</span>':o.pickup_location_source==="pincode_centre"?'<span class="tag warn">Pincode centre</span>':'<span class="tag bad">Unknown</span>';
+    return `<tr><td class="mono">${esc(s.awb)}</td><td>${esc(o.pickup_pincode)}</td><td>${loc}</td><td>${o.charged_kg??"—"} kg</td>
+    <td>${s.truck_no?`<span class="mono">${esc(s.truck_no)}</span>`:'<span class="tag bad">None</span>'}</td><td>${s.distance_km!=null?s.distance_km+" km":"—"}</td><td>${esc(s.reason)}</td></tr>`}).join("")||'<tr><td colspan="7" class="muted">No orders are waiting for pickup.</td></tr>';
+  if(!map)return; layer.clearLayers(); const pts=[];
+  S.trucks.forEach(t=>{if(t.last_lat==null)return;const u=usable(t);pts.push([t.last_lat,t.last_lon]);
+    L.circleMarker([t.last_lat,t.last_lon],{radius:8,color:"#fff",weight:2,fillColor:u?"#2563EB":"#9AA3B2",fillOpacity:1})
+     .bindTooltip(`${t.truck_no} · ${t.status.replace("_"," ")} · ${Math.round(t.capacity_kg-t.load_kg)} kg free · GPS ${ago(t.last_ping_at)}`).addTo(layer)});
+  S.suggest.forEach(s=>{const o=byAwb.get(s.awb);if(!o||o.pickup_lat==null)return;pts.push([o.pickup_lat,o.pickup_lon]);
+    L.circleMarker([o.pickup_lat,o.pickup_lon],{radius:6,color:"#111",weight:1,fillColor:s.truck_no?"#F2A516":"#B91C1C",fillOpacity:1})
+     .bindTooltip(`${s.awb} · ${o.charged_kg} kg · ${s.reason}`).addTo(layer);
+    const t=s.truck_no&&byTruck.get(s.truck_no);
+    if(t)L.polyline([[o.pickup_lat,o.pickup_lon],[t.last_lat,t.last_lon]],{color:"#2563EB",weight:2,dashArray:"6 5"}).addTo(layer)});
+  S.pts=pts;
+  if(!fitted&&pts.length){map.fitBounds(pts,{padding:[30,30],maxZoom:12});fitted=true}
+}
+$("dArea").addEventListener("change",e=>{if(!map)return;const v=e.target.value;
+  if(v){const [a,b,z]=v.split(",").map(Number);map.setView([a,b],z)} else if(S.pts?.length)map.fitBounds(S.pts,{padding:[30,30],maxZoom:12})});
+$("dSuggest").addEventListener("click",loadSuggest);
+$("dKm").addEventListener("change",loadSuggest);$("dFresh").addEventListener("change",loadSuggest);
+$("dConfirm").addEventListener("click",async()=>{
+  $("dConfirm").disabled=true;
+  const {data,error}=await sb.rpc("confirm_allocations",{p_max_km:+$("dKm").value||null,p_fresh_min:+$("dFresh").value||null});
+  toast(error?error.message:`${data} pickup${data===1?"":"s"} allocated`);
+  await Promise.all([loadOrders(),loadTrucks()]);loadSuggest();
+});
+$("dSave").addEventListener("click",async()=>{
+  const {error}=await sb.from("settings").update({max_distance_km:+$("dKm").value,gps_fresh_minutes:+$("dFresh").value}).eq("id",1);
+  toast(error?error.message:"Saved as default for everyone")});
+
+// ---------- trucks
+function renderTrucks(){
+  const fresh=(+$("dFresh").value||15)*60000;
+  $("tBody").innerHTML=S.trucks.map(t=>{const old=!t.last_ping_at||Date.now()-Date.parse(t.last_ping_at)>fresh;
+    return `<tr data-t="${esc(t.truck_no)}"><td class="mono">${esc(t.truck_no)}</td><td>${esc(t.driver_name)}<div class="muted mono">${esc(t.driver_phone||"")}</div></td>
+    <td>${(+t.capacity_kg).toLocaleString("en-IN")} kg</td><td>${Math.round(t.load_kg).toLocaleString("en-IN")} kg</td>
+    <td><select data-f="status" aria-label="Status of ${esc(t.truck_no)}">${["available","full","off_duty"].map(s=>`<option value="${s}"${s===t.status?" selected":""}>${s.replace("_"," ")}</option>`).join("")}</select></td>
+    <td><input data-f="gps_device_id" value="${esc(t.gps_device_id||"")}" placeholder="IMEI" style="width:150px" aria-label="GPS device of ${esc(t.truck_no)}"></td>
+    <td><span class="tag ${old?"bad":"ok"}">${ago(t.last_ping_at)}</span></td><td>${t.last_speed_kmph??"—"}</td>
+    <td><button class="btn ghost" data-unload ${+t.load_kg>0?"":"disabled"}>Unload</button></td></tr>`}).join("")||'<tr><td colspan="9" class="muted">No trucks yet. Add your first truck above.</td></tr>';
+}
+$("tBody").addEventListener("change",async e=>{const f=e.target.dataset.f;if(!f)return;const no=e.target.closest("tr").dataset.t;
+  const v=e.target.value.trim()||null;const {error}=await sb.from("trucks").update({[f]:v}).eq("truck_no",no);toast(error?error.message:"Saved "+no)});
+$("tBody").addEventListener("click",async e=>{if(!e.target.matches("[data-unload]"))return;const no=e.target.closest("tr").dataset.t;
+  const {error}=await sb.from("trucks").update({load_kg:0}).eq("truck_no",no);toast(error?error.message:no+" unloaded")});
+$("addTruck").addEventListener("submit",async e=>{e.preventDefault();$("tErr").textContent="";
+  const no=$("tNo").value.toUpperCase().replace(/[\s-]/g,""),ph=$("tPhone").value.trim();
+  if(!/^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{4}$/.test(no)){$("tErr").textContent="Enter a truck number like DL01AB1234.";return}
+  if(ph&&!/^[6-9]\d{9}$/.test(ph)){$("tErr").textContent="Driver mobile must be 10 digits.";return}
+  const {error}=await sb.from("trucks").insert({truck_no:no,driver_name:$("tDriver").value.trim(),driver_phone:ph||null,capacity_kg:+$("tCap").value,gps_device_id:$("tImei").value.trim()||null});
+  if(error){$("tErr").textContent=error.code==="23505"?"That truck or device ID is already registered.":error.message;return}
+  // Optional starting position from the pincodes table, saved as a manual ping.
+  const pc=$("tPin").value.trim(); let placed=false;
+  if(/^[1-9]\d{5}$/.test(pc)){const {data:p}=await sb.from("pincodes").select("lat,lon").eq("pincode",pc).maybeSingle();
+    if(p){await sb.from("gps_pings").insert({truck_no:no,lat:p.lat,lon:p.lon,speed_kmph:0,recorded_at:new Date().toISOString(),source:"manual"});placed=true}}
+  $("addTruck").reset();$("tCap").value=1500;
+  toast(placed?no+" added at pincode "+pc:no+" added. It shows on the map after its first GPS ping.");loadTrucks()});
+
+// ---------- GPS simulator
+$("sim").addEventListener("click",async()=>{
+  const rows=S.trucks.filter(t=>t.last_lat!=null).map(t=>{const move=t.status!=="off_duty",d=move?0.3+Math.random()*1.5:0,a=Math.random()*2*Math.PI;
+    return{truck_no:t.truck_no,lat:+(t.last_lat+d/111.32*Math.cos(a)).toFixed(6),lon:+(t.last_lon+d/(111.32*Math.cos(t.last_lat*Math.PI/180))*Math.sin(a)).toFixed(6),speed_kmph:move?Math.round(5+Math.random()*30):0,recorded_at:new Date().toISOString(),source:"simulated"}});
+  if(!rows.length){toast("No truck has a first position yet. Insert one ping per truck (see README).");return}
+  const {error}=await sb.from("gps_pings").insert(rows);
+  toast(error?error.message:`Sent ${rows.length} pings`);if(!error){await loadTrucks();loadPings()}
+});
+boot();
+</script>
+</body>
+</html>
