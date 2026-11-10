@@ -54,6 +54,11 @@ td select{padding:4px 6px;font-size:13px}
 .wh-pin em{font-style:normal;background:#F2A516;color:#1A1405;font:700 11px var(--f-body);padding:1px 6px;border-radius:999px}
 .trip td{background:#F6F2FB;font-weight:600}
 .tag.wh{background:#FAE8FF;color:#86198F}
+.neg{color:var(--err);font-weight:700} .pos{color:var(--ok);font-weight:700}
+.est{font-size:10px;font-weight:700;color:var(--warn);margin-left:3px}
+#flagCount:not(:empty){background:var(--err);color:#fff;border-radius:999px;padding:0 6px;font-size:11px;margin-left:4px}
+.setgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.setgrid label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
 .legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px}
@@ -81,7 +86,7 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
 <header class="top"><div class="in">
   <span class="brand">Dakbox<small>Operations</small></span>
   <nav class="tabs" id="tabs">
-    <button data-v="orders" class="on">Orders</button><button data-v="dispatch">Dispatch</button><button data-v="trucks">Trucks</button><button data-v="times">Loading times</button>
+    <button data-v="orders" class="on">Orders</button><button data-v="dispatch">Dispatch</button><button data-v="trucks">Trucks</button><button data-v="times">Loading times</button><button data-v="money">Money</button><button data-v="flags">Flags <span id="flagCount"></span></button>
   </nav>
   <div class="who"><span id="whoEmail"></span><button class="btn ghost" id="logout" type="button">Sign out</button></div>
 </div></header>
@@ -116,8 +121,8 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
     <div id="dmap"></div>
     <div class="legend"><span><i style="background:#C026D3;border-radius:3px"></i>Warehouse (yellow badge = parcels waiting)</span><span><i style="background:var(--accent)"></i>Truck ready</span><span><i style="background:#9AA3B2"></i>Truck not usable (old GPS, full, off duty, on a trip)</span><span>Dashed line: truck suggested for that warehouse</span></div>
     <div class="tw"><table>
-      <thead><tr><th>Trip / AWB</th><th>From warehouse</th><th>To warehouse</th><th>Weight</th><th>Truck</th><th>Truck to warehouse</th><th>Driver earns (trip, est.)</th><th>Why</th></tr></thead>
-      <tbody id="dBody"><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
+      <thead><tr><th>Trip / AWB</th><th>From warehouse</th><th>To warehouse</th><th>Weight</th><th>Truck full</th><th>Truck</th><th>Truck to warehouse</th><th>Driver earns (trip, est.)</th><th>Why</th></tr></thead>
+      <tbody id="dBody"><tr><td colspan="9" class="muted">Loading…</td></tr></tbody>
     </table></div>
   </section>
 
@@ -158,6 +163,31 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
       <thead><tr><th>Arrived</th><th>Warehouse</th><th>Truck</th><th>Job</th><th>Parcels</th><th>Waiting</th><th>Loading</th><th>Total</th><th>Left</th><th>Delay reason</th></tr></thead>
       <tbody id="tmBody"><tr><td colspan="10" class="muted">Loading…</td></tr></tbody></table></div>
     <p class="muted">Warehouse staff scan parcels on <a id="whLink" href="warehouse.html" target="_blank" rel="noopener">the warehouse page</a>. Waiting = arrival to first scan. Loading = first to last scan. Total = arrival to last scan.</p>
+  </section>
+
+  <!-- MONEY -->
+  <section id="v-money" hidden style="display:flex;flex-direction:column;gap:14px">
+    <div class="bar">
+      <label>Period<select id="mPeriod"><option value="1">Today</option><option value="7" selected>Last 7 days</option><option value="30">Last 30 days</option><option value="3650">All</option></select></label>
+      <span class="muted">Revenue is the truck's share of the freight only. Values marked <span class="est">EST</span> are estimates until you enter real fuel and tolls.</span>
+    </div>
+    <div class="stats" id="mStats"></div>
+    <div class="tw"><table>
+      <thead><tr><th>Trip</th><th>Route</th><th>Truck full</th><th>Revenue</th><th>Fuel</th><th>Tolls</th><th>Driver</th><th>Fixed cost</th><th>Profit</th><th>Per truck-hour</th><th>Breakeven load</th><th>Waiting cost</th><th></th></tr></thead>
+      <tbody id="mBody"><tr><td colspan="13" class="muted">Loading…</td></tr></tbody></table></div>
+    <details class="card"><summary><b>Rates used</b> <span class="muted">(examples: replace with your real numbers)</span></summary>
+      <form id="rates" class="setgrid" style="margin-top:12px"></form>
+      <div><button class="btn" id="saveRates" type="button">Save rates</button></div>
+    </details>
+  </section>
+
+  <!-- FLAGS -->
+  <section id="v-flags" hidden style="display:flex;flex-direction:column;gap:14px">
+    <p class="muted">Rules checked live. A flag never changes a number: it tells you which numbers not to trust yet, or what to fix.</p>
+    <div class="stats" id="fStats"></div>
+    <div class="tw"><table style="min-width:640px">
+      <thead><tr><th>Rule</th><th>Problem</th><th>Detail</th><th>When</th></tr></thead>
+      <tbody id="fBody"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody></table></div>
   </section>
 </main>
 </div>
@@ -210,6 +240,7 @@ async function start(session){
   $("oStatus").innerHTML='<option value="">All</option>'+Object.entries(STATUS).map(([k,v])=>`<option value="${k}">${v}</option>`).join("");
   await loadSettings();
   await Promise.all([loadOrders(),loadTrucks(),loadWarehouses()]);
+  loadFlags();
   // Live updates: any change to orders or trucks refreshes the screen.
   let t1,t2;
   sb.channel("ops").on("postgres_changes",{event:"*",schema:"public",table:"orders"},()=>{clearTimeout(t1);t1=setTimeout(async()=>{await loadOrders();if(S.view==="dispatch")loadSuggest()},400)})
@@ -220,8 +251,10 @@ async function start(session){
 // ---------- tabs
 $("tabs").addEventListener("click",e=>{const v=e.target.dataset.v;if(!v)return;S.view=v;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));
-  ["orders","dispatch","trucks","times"].forEach(x=>$("v-"+x).hidden=x!==v);
+  ["orders","dispatch","trucks","times","money","flags"].forEach(x=>$("v-"+x).hidden=x!==v);
   if(v==="times")loadTimes();
+  if(v==="money")loadMoney();
+  if(v==="flags")loadFlags();
   if(v==="dispatch"){initMap();setTimeout(()=>map.invalidateSize(),50);loadSuggest()}
 });
 
@@ -244,7 +277,9 @@ function renderOrders(){
 }
 $("oStatus").addEventListener("change",renderOrders);$("oSearch").addEventListener("input",renderOrders);
 $("oBody").addEventListener("change",async e=>{const awb=e.target.dataset.awb;if(!awb)return;
-  const {error}=await sb.rpc("set_order_status",{p_awb:awb,p_status:e.target.value,p_note:"Changed in ops"});
+  const why=(prompt("Why are you changing this parcel's status? (Saved with the change)")||"").trim();
+  if(why.length<3){toast("Not changed: a reason is needed");loadOrders();return}
+  const {error}=await sb.rpc("set_order_status",{p_awb:awb,p_status:e.target.value,p_note:"Changed in ops: "+why});
   toast(error?error.message:"Saved "+awb);if(error)loadOrders()});
 
 // ---------- dispatch (free map: Leaflet + OpenStreetMap)
@@ -267,15 +302,23 @@ function renderDispatch(){
     if(!trips.has(key))trips.set(key,{truck:s.truck_no,from:o.origin_wh,to:o.dest_wh,km:s.distance_km,rows:[]});trips.get(key).rows.push({s,o})});
   const est=t=>{const a=wh.get(t.from),b=wh.get(t.to);const trip=a&&b?kmBetween(a.lat,a.lon,b.lat,b.lon):0;
     return Math.round((+S.settings.trip_pay_base||300)+(+S.settings.trip_pay_per_km||3)*((+t.km||0)+trip))};
-  const tripCount=[...trips.values()].filter(t=>t.truck).length;
+  // Dispatch rule: a trip leaves when the truck is min_fill_pct full, or its oldest parcel has waited max_wait_hours
+  const minFill=+S.settings.min_fill_pct||60, maxWait=+S.settings.max_wait_hours||24;
+  trips.forEach(t=>{if(!t.truck)return;const tr=byTruck.get(t.truck);t.kg=t.rows.reduce((a,r)=>a+(+r.o.charged_kg||0),0);
+    t.fill=tr?t.kg/tr.capacity_kg*100:0;t.oldest=Math.min(...t.rows.map(r=>Date.parse(r.o.created_at)));
+    t.leaveAt=t.oldest+maxWait*3600000;t.ready=t.fill>=minFill||now>=t.leaveAt});
+  const tripCount=[...trips.values()].filter(t=>t.truck&&t.ready).length;
+  const readyParcels=[...trips.values()].filter(t=>t.truck&&t.ready).reduce((a,t)=>a+t.rows.length,0);
   $("dStats").innerHTML=`<div class="stat"><span class="muted">Parcels waiting</span><b>${S.suggest.length}</b></div><div class="stat"><span class="muted">Trips ready to send</span><b>${tripCount}</b></div><div class="stat"><span class="muted">Trucks ready</span><b>${S.trucks.filter(usable).length} / ${S.trucks.length}</b></div><div class="stat"><span class="muted">Warehouses</span><b>${(S.wh||[]).filter(w=>w.active).length}</b></div>`;
-  $("dConfirm").disabled=!ok.length;$("dConfirm").textContent=ok.length?`Send ${tripCount} trip${tripCount>1?"s":""} (${ok.length} parcel${ok.length>1?"s":""})`:"Nothing to allocate";
+  $("dConfirm").disabled=!tripCount;$("dConfirm").textContent=tripCount?`Send ${tripCount} ready trip${tripCount>1?"s":""} (${readyParcels} parcel${readyParcels>1?"s":""})`:"No trip ready yet";
   const wn=c=>c?(wh.get(c)?.name||c):"—";
   $("dBody").innerHTML=[...trips.values()].map(t=>{const kg=t.rows.reduce((a,r)=>a+(+r.o.charged_kg||0),0);
     return `<tr class="trip"><td>${t.truck?"Trip":"Waiting"} · ${t.rows.length} parcel${t.rows.length>1?"s":""}</td><td>${esc(wn(t.from))}</td><td>${esc(wn(t.to))}</td><td>${kg} kg</td>
-      <td>${t.truck?`<span class="mono">${esc(t.truck)}</span>`:'<span class="tag bad">None</span>'}</td><td>${t.km!=null?t.km+" km":"—"}</td><td>${t.truck?inr(est(t)):"—"}</td><td>${esc(t.rows[0].s.reason)}</td></tr>`+
-      t.rows.map(({s,o})=>`<tr><td class="mono" style="padding-left:24px">${esc(s.awb)}</td><td></td><td></td><td>${o.charged_kg??"—"} kg</td><td></td><td></td><td></td><td class="muted">${s.reason!==t.rows[0].s.reason?esc(s.reason):""}</td></tr>`).join("")}).join("")
-    ||'<tr><td colspan="8" class="muted">No parcels are waiting for a truck.</td></tr>';
+      <td>${t.truck?`<span class="${t.fill>=minFill?"pos":""}">${t.fill.toFixed(1)}%</span>`:"—"}</td>
+      <td>${t.truck?`<span class="mono">${esc(t.truck)}</span>`:'<span class="tag bad">None</span>'}</td><td>${t.km!=null?t.km+" km":"—"}</td><td>${t.truck?inr(est(t)):"—"}</td><td>${!t.truck?esc(t.rows[0].s.reason):t.ready?'<span class="tag ok">Ready to send</span> '+esc(t.rows[0].s.reason)
+        :`<span class="tag warn">Holding</span> Leaves when ${minFill}% full or at ${new Date(t.leaveAt).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})} <button class="btn ghost" data-sendnow="${esc(t.rows.map(r=>r.s.awb).join(","))}">Send now</button>`}</td></tr>`+
+      t.rows.map(({s,o})=>`<tr><td class="mono" style="padding-left:24px">${esc(s.awb)}</td><td></td><td></td><td>${o.charged_kg??"—"} kg</td><td></td><td></td><td></td><td></td><td class="muted">${s.reason!==t.rows[0].s.reason?esc(s.reason):""}</td></tr>`).join("")}).join("")
+    ||'<tr><td colspan="9" class="muted">No parcels are waiting for a truck.</td></tr>';
   if(!map)return; layer.clearLayers(); const pts=[];
   const waiting={};S.orders.filter(o=>o.status==="booked").forEach(o=>{if(o.origin_wh)waiting[o.origin_wh]=(waiting[o.origin_wh]||0)+1});
   // Suggestion lines: truck to origin warehouse
@@ -296,6 +339,14 @@ $("dArea").addEventListener("change",e=>{if(!map)return;const v=e.target.value;
   if(v){const [a,b,z]=v.split(",").map(Number);map.setView([a,b],z)} else if(S.pts?.length)map.fitBounds(S.pts,{padding:[30,30],maxZoom:12})});
 $("dSuggest").addEventListener("click",loadSuggest);
 $("dKm").addEventListener("change",loadSuggest);$("dFresh").addEventListener("change",loadSuggest);
+$("dBody").addEventListener("click",async e=>{const b=e.target.closest("[data-sendnow]");if(!b)return;
+  const why=(prompt("This truck is below its fill target and will likely lose money. Why send it now? (Saved with the trip)")||"").trim();
+  if(why.length<3){toast("Not sent: a reason is needed");return}
+  b.disabled=true;
+  const {data,error}=await sb.rpc("confirm_allocations",{p_max_km:+$("dKm").value||null,p_fresh_min:+$("dFresh").value||null,p_send_now:b.dataset.sendnow.split(","),p_reason:why});
+  toast(error?error.message:`${data} parcel${data===1?"":"s"} sent to trucks`);
+  await Promise.all([loadOrders(),loadTrucks()]);loadSuggest();
+});
 $("dConfirm").addEventListener("click",async()=>{
   $("dConfirm").disabled=true;
   const {data,error}=await sb.rpc("confirm_allocations",{p_max_km:+$("dKm").value||null,p_fresh_min:+$("dFresh").value||null});
@@ -378,6 +429,51 @@ function renderTimes(rows){
     <td>${r.delay_reason?esc(REASON[r.delay_reason]):(t??0)>=45&&r.last_scan_at?'<span class="tag bad">Missing</span>':'<span class="muted">—</span>'}</td></tr>`}).join("")||'<tr><td colspan="10" class="muted">No truck visits in this period. They appear when a truck arrives at a warehouse or the first parcel is scanned.</td></tr>';
 }
 $("tPeriod").addEventListener("change",loadTimes);
+// ---------- money: trip P&L
+const RATES=[["line_haul_share","Truck's share of freight (0 to 1)",0.01],["diesel_price","Diesel ₹ per litre",1],["km_per_l_loaded","Km per litre, loaded",0.1],["km_per_l_empty","Km per litre, empty",0.1],
+  ["toll_per_km","Tolls ₹ per km (estimate)",0.1],["fixed_per_day","Fixed cost ₹ per truck per day",50],["road_factor","Road km ÷ straight-line km",0.05],
+  ["min_fill_pct","Send trip when truck is this % full",5],["max_wait_hours","…or oldest parcel waited (hours)",1],["trip_pay_base","Driver pay per trip ₹",10],["trip_pay_per_km","Driver pay ₹ per km",0.5]];
+function renderRates(){$("rates").innerHTML=RATES.map(([k,l,st])=>`<label>${l}<input type="number" step="${st}" id="r_${k}" value="${S.settings[k]??""}"></label>`).join("")}
+$("saveRates").addEventListener("click",async()=>{const v={};RATES.forEach(([k])=>{const x=$("r_"+k).value;if(x!=="")v[k]=+x});
+  const {error}=await sb.from("settings").update(v).eq("id",1);toast(error?error.message:"Rates saved");if(!error){await loadSettings();loadMoney()}});
+async function loadMoney(){
+  renderRates();
+  const since=new Date(Date.now()-(+$("mPeriod").value)*86400000);if($("mPeriod").value==="1")since.setHours(0,0,0,0);
+  const {data,error}=await sb.from("trip_pnl").select("*").gte("assigned_at",since.toISOString()).order("assigned_at",{ascending:false}).limit(300);
+  if(error){$("mBody").innerHTML=`<tr><td colspan="13" class="muted">${/trip_pnl/.test(error.message)?"Money view is not set up yet. In Supabase, SQL Editor, run supabase/migration_005_money_rules.sql.":esc(error.message)}</td></tr>`;$("mStats").innerHTML="";return}
+  const rows=data||[], sum=f=>rows.reduce((a,r)=>a+(+r[f]||0),0);
+  const hours=sum("cycle_hours"), contrib=sum("contribution");
+  const money=n=>`<span class="${n<0?"neg":"pos"}">${n<0?"−":""}${inr(Math.abs(n))}</span>`;
+  $("mStats").innerHTML=`<div class="stat"><span class="muted">Trips</span><b>${rows.length}</b></div><div class="stat"><span class="muted">Revenue (truck share)</span><b>${inr(sum("revenue"))}</b></div><div class="stat"><span class="muted">Profit</span><b>${money(sum("profit"))}</b></div><div class="stat"><span class="muted">Avg truck full</span><b>${rows.length?(sum("fill_pct")/rows.length).toFixed(1):0}%</b></div><div class="stat"><span class="muted">Earning per truck-hour</span><b>${hours?money(Math.round(contrib/hours)):"—"}</b></div><div class="stat"><span class="muted">Cost of waiting at warehouses</span><b>${inr(sum("dwell_cost"))}</b></div>`;
+  const est=b=>b?"":'<span class="est">EST</span>';
+  $("mBody").innerHTML=rows.map(r=>`<tr data-k="${esc(r.trip_key)}"><td>${new Date(r.assigned_at).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}<div class="muted mono">${esc(r.truck_no)}</div></td>
+    <td>${esc(r.from_name)} → ${esc(r.to_name||"?")}<div class="muted" style="font-size:12px">${r.parcels} parcels · ${r.kg} kg · ${r.loaded_km} km${r.completed?"":" · in progress"}</div></td>
+    <td>${r.fill_pct}%</td><td>${inr(r.revenue)}</td><td>${inr(r.fuel)}${est(r.fuel_is_actual)}</td><td>${inr(r.tolls)}${est(r.tolls_is_actual)}</td><td>${inr(r.driver_pay)}</td>
+    <td>${inr(r.fixed_cost)}<div class="muted" style="font-size:12px">${r.cycle_hours} h${r.cycle_actual?"":" est."}</div></td>
+    <td>${money(+r.profit)}</td><td>${money(+r.per_truck_hour)}</td>
+    <td>${r.breakeven_kg!=null?(+r.breakeven_kg).toLocaleString("en-IN")+" kg":"—"}<div class="muted" style="font-size:12px">${r.breakeven_kg!=null?Math.round(r.breakeven_kg/r.capacity_kg*100)+"% of truck":""}</div></td>
+    <td>${inr(r.dwell_cost)}<div class="muted" style="font-size:12px">${r.dwell_min} min</div></td>
+    <td><button class="btn ghost" data-costs>Enter real costs</button></td></tr>`).join("")||'<tr><td colspan="13" class="muted">No trips in this period. Trips appear here when Dispatch sends them.</td></tr>';
+}
+$("mPeriod").addEventListener("change",loadMoney);
+$("mBody").addEventListener("click",async e=>{if(!e.target.matches("[data-costs]"))return;const k=e.target.closest("tr").dataset.k;
+  const fuel=prompt("Actual fuel cost for this trip, in ₹ (from the fuel card or bills):");if(fuel===null)return;
+  const tolls=prompt("Actual tolls for this trip, in ₹ (from FASTag):");if(tolls===null)return;
+  const row={trip_key:k};if(fuel.trim()!=="")row.fuel_rs=+fuel;if(tolls.trim()!=="")row.tolls_rs=+tolls;
+  if((row.fuel_rs!=null&&!(row.fuel_rs>=0))||(row.tolls_rs!=null&&!(row.tolls_rs>=0))){toast("Enter amounts in ₹, numbers only");return}
+  const {error}=await sb.from("trip_costs").upsert(row);toast(error?error.message:"Real costs saved");loadMoney()});
+
+// ---------- flags
+const RULE_NAME={R2:"GPS",R3:"Scans",R5:"Waiting reason",R6:"Real fuel",R8:"Truck earns its share",R10:"Manual changes",R11:"Gaming check",R12:"Every order placed"};
+async function loadFlags(){
+  const {data,error}=await sb.from("rule_flags").select("*").order("at",{ascending:false}).limit(300);
+  if(error){$("fBody").innerHTML=`<tr><td colspan="4" class="muted">${/rule_flags/.test(error.message)?"Flags are not set up yet. In Supabase, SQL Editor, run supabase/migration_005_money_rules.sql.":esc(error.message)}</td></tr>`;return}
+  const rows=data||[];$("flagCount").textContent=rows.length||"";
+  const by={};rows.forEach(r=>{by[r.title]=(by[r.title]||0)+1});
+  $("fStats").innerHTML=Object.entries(by).map(([t,n])=>`<div class="stat"><span class="muted">${esc(t)}</span><b>${n}</b></div>`).join("")||'<div class="stat"><span class="muted">Open flags</span><b>0</b></div>';
+  $("fBody").innerHTML=rows.map(r=>`<tr><td><span class="tag ${r.severity==="STOP"?"bad":"warn"}">${esc(r.rule)} ${r.severity}</span><div class="muted" style="font-size:12px">${esc(RULE_NAME[r.rule]||"")}</div></td><td><b>${esc(r.title)}</b></td><td>${esc(r.detail)}</td><td>${r.at?new Date(r.at).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}</td></tr>`).join("")
+    ||'<tr><td colspan="4" class="muted">No flags. Every rule passes right now.</td></tr>';
+}
 boot();
 </script>
 </body>

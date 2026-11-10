@@ -126,6 +126,7 @@ Run once each in the Supabase SQL Editor, if your database is older than the fea
 3. `supabase/migration_002_driver_jobs.sql`
 4. `supabase/migration_003_warehouses.sql`
 5. `supabase/migration_004_scans.sql`
+6. `supabase/migration_005_money_rules.sql`
 
 ## Warehouse page (loading and unloading by scan)
 `warehouse.html`, e.g. https://sahilrathour007.github.io/dakbox-ops/warehouse.html
@@ -144,3 +145,17 @@ What is measured (ops site, **Loading times** tab), only from GPS and scans:
 
 Customers print a label with a Code 128 barcode of the AWB from the booking confirmation.
 Drivers can no longer mark parcels loaded or unloaded themselves: the scans do it.
+
+## Money, dispatch rule and flags
+**Money tab: the P&L of every trip** (a trip = the parcels one truck takes on one route in one dispatch):
+- **Revenue** = freight × the truck's line-haul share (default ⅓). The truck is never credited the full parcel price.
+- **Fuel** = (road km ÷ km per litre loaded + empty km to the warehouse ÷ km per litre empty) × diesel price. **Tolls** = road km × ₹ per km. Both are marked **EST** until you click **Enter real costs** and type the fuel-card and FASTag amounts.
+- **Driver** = trip pay. **Fixed cost** = fixed ₹ per day ÷ 24 × cycle hours (actual once unloaded, otherwise estimated).
+- **Profit**, **earning per truck-hour** (what one hour of this truck earned: the shadow price), **breakeven load** (kg needed to stop losing money on this route), **cost of waiting** at warehouses (waiting minutes × fixed cost per hour).
+- **Rates used**: every example rate is editable at the bottom of the tab.
+
+**Dispatch rule**: a trip is sent only when the truck is at least 60% full, **or** its oldest parcel has waited 24 hours (both editable). Until then it shows **Holding**. **Send now** sends it early but asks for a reason, which is saved with the trip.
+
+**Status changes** on the Orders tab ask for a reason, which is saved in the parcel's history.
+
+**Flags tab**: rules checked live: GPS lost on a trip (R2), impossible GPS jumps (R2), repeated rejected scans (R3), long waits with no reason (R5), finished trips still on estimated fuel or tolls (R6), trips losing money (R8), many manual changes by one person (R10), loading faster than 5 seconds per parcel (R11), orders with no warehouse (R12).
