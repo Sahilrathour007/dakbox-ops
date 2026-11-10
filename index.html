@@ -47,7 +47,13 @@ th{position:sticky;top:0;background:#F6F7F9;font-size:11px;letter-spacing:.06em;
 td select{padding:4px 6px;font-size:13px}
 .tag{font-size:11px;font-weight:600;padding:2px 7px;border-radius:4px;white-space:nowrap;background:#ECEEF2;color:var(--muted)}
 .tag.ok{background:var(--ok-soft);color:var(--ok)} .tag.warn{background:var(--warn-soft);color:var(--warn)} .tag.bad{background:var(--err-soft);color:var(--err)} .tag.blue{background:var(--accent-soft);color:var(--accent)}
-#dmap{height:440px;border-radius:8px;border:1px solid var(--line)}
+#dmap{height:480px;border-radius:8px;border:1px solid var(--line)}
+.wh-pin{display:flex;align-items:center;gap:6px;white-space:nowrap;pointer-events:auto}
+.wh-pin b{display:grid;place-items:center;width:26px;height:26px;border-radius:6px;background:#C026D3;color:#fff;font:700 12px var(--f-body);border:2px solid #fff;box-shadow:0 0 0 4px rgba(192,38,211,.35),0 2px 6px rgba(0,0,0,.35)}
+.wh-pin span{background:#fff;color:#701A75;font:600 12px var(--f-body);padding:2px 6px;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.wh-pin em{font-style:normal;background:#F2A516;color:#1A1405;font:700 11px var(--f-body);padding:1px 6px;border-radius:999px}
+.trip td{background:#F6F2FB;font-weight:600}
+.tag.wh{background:#FAE8FF;color:#86198F}
 .legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px}
@@ -75,7 +81,7 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
 <header class="top"><div class="in">
   <span class="brand">Dakbox<small>Operations</small></span>
   <nav class="tabs" id="tabs">
-    <button data-v="orders" class="on">Orders</button><button data-v="dispatch">Dispatch</button><button data-v="trucks">Trucks</button>
+    <button data-v="orders" class="on">Orders</button><button data-v="dispatch">Dispatch</button><button data-v="trucks">Trucks</button><button data-v="warehouses">Warehouses</button>
   </nav>
   <div class="who"><span id="whoEmail"></span><button class="btn ghost" id="logout" type="button">Sign out</button></div>
 </div></header>
@@ -90,7 +96,7 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
       <span class="muted" id="oCount"></span>
     </div>
     <div class="tw"><table>
-      <thead><tr><th>AWB</th><th>Booked</th><th>Sender</th><th>Pickup</th><th>Delivery</th><th>Weight</th><th>Total</th><th>Status</th><th>Truck</th></tr></thead>
+      <thead><tr><th>AWB</th><th>Booked</th><th>Sender</th><th>Pickup</th><th>Delivery</th><th>Route</th><th>Weight</th><th>Total</th><th>Status</th><th>Truck</th></tr></thead>
       <tbody id="oBody"><tr><td colspan="9" class="muted">Loading orders…</td></tr></tbody>
     </table></div>
   </section>
@@ -107,9 +113,9 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
     </div>
     <div class="stats" id="dStats"></div>
     <div id="dmap"></div>
-    <div class="legend"><span><i style="background:var(--accent)"></i>Truck ready</span><span><i style="background:#9AA3B2"></i>Truck not usable (old GPS, full, off duty)</span><span><i style="background:#F2A516"></i>Pickup with a suggested truck</span><span><i style="background:var(--err)"></i>Pickup with no truck</span><span>Dashed line: suggestion</span></div>
+    <div class="legend"><span><i style="background:#C026D3;border-radius:3px"></i>Warehouse (yellow badge = parcels waiting)</span><span><i style="background:var(--accent)"></i>Truck ready</span><span><i style="background:#9AA3B2"></i>Truck not usable (old GPS, full, off duty, on a trip)</span><span>Dashed line: truck suggested for that warehouse</span></div>
     <div class="tw"><table>
-      <thead><tr><th>AWB</th><th>Pickup pincode</th><th>Location</th><th>Weight</th><th>Suggested truck</th><th>Distance</th><th>Driver earns</th><th>Why</th></tr></thead>
+      <thead><tr><th>Trip / AWB</th><th>From warehouse</th><th>To warehouse</th><th>Weight</th><th>Truck</th><th>Truck to warehouse</th><th>Driver earns (trip, est.)</th><th>Why</th></tr></thead>
       <tbody id="dBody"><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
     </table></div>
   </section>
@@ -135,6 +141,26 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
     </form>
   </section>
 
+  <!-- WAREHOUSES -->
+  <section id="v-warehouses" hidden style="display:flex;flex-direction:column;gap:14px">
+    <div class="tw"><table>
+      <thead><tr><th>Warehouse</th><th>City</th><th>Parcels waiting</th><th>Trucks within reach</th><th>Position</th><th>Active</th><th></th></tr></thead>
+      <tbody id="wBody"><tr><td colspan="7" class="muted">Loading warehouses…</td></tr></tbody>
+    </table></div>
+    <h2>Add a warehouse</h2>
+    <form class="bar card" id="addWh" style="flex-direction:row">
+      <label>Code<input id="wCode" placeholder="DEL02" maxlength="5" style="width:90px" required></label>
+      <label>Name<input id="wName" placeholder="Bawana Warehouse" required></label>
+      <label>City<input id="wCity" required style="width:130px"></label>
+      <label>Pincode<input id="wPin" inputmode="numeric" maxlength="6" style="width:100px"></label>
+      <label>Latitude<input id="wLat" inputmode="decimal" style="width:110px" required></label>
+      <label>Longitude<input id="wLon" inputmode="decimal" style="width:110px" required></label>
+      <button class="btn ghost" type="button" id="wHere">Use my location</button>
+      <button class="btn" type="submit">Add warehouse</button>
+      <p class="muted" style="flex-basis:100%;margin:0">Tip: in Google Maps, right-click the spot and click the numbers to copy them, then paste into Latitude. Both boxes fill in.</p>
+      <p class="err" id="wErr" style="flex-basis:100%;margin:0"></p>
+    </form>
+  </section>
 </main>
 </div>
 <div class="toast" id="toast" hidden></div>
@@ -169,7 +195,8 @@ $("login").addEventListener("submit",async e=>{
 $("logout").addEventListener("click",()=>sb.auth.signOut());
 
 // ---------- data
-async function loadOrders(){const {data,error}=await sb.from("orders").select("*").order("created_at",{ascending:false}).limit(500);if(!error){S.orders=data;renderOrders();renderTrucks();}}
+async function loadOrders(){const {data,error}=await sb.from("orders").select("*").order("created_at",{ascending:false}).limit(500);if(!error){S.orders=data;renderOrders();renderTrucks();renderWarehouses();}}
+async function loadWarehouses(){const {data,error}=await sb.from("warehouses").select("*").order("code");if(!error){S.wh=data;renderWarehouses();renderTrucks();if(S.view==="dispatch")renderDispatch()}}
 async function loadTrucks(){const {data,error}=await sb.from("trucks").select("*").order("truck_no");if(!error){S.trucks=data;renderTrucks();}}
 async function loadSettings(){const {data}=await sb.from("settings").select("*").eq("id",1).maybeSingle();if(data)S.settings=data;$("dKm").value=S.settings.max_distance_km;$("dFresh").value=S.settings.gps_fresh_minutes}
 async function loadSuggest(){
@@ -184,7 +211,7 @@ async function start(session){
   sb.from("pincodes").select("pincode,area,city,lat,lon").then(r=>{S.pins=r.data||[];renderTrucks()});
   $("oStatus").innerHTML='<option value="">All</option>'+Object.entries(STATUS).map(([k,v])=>`<option value="${k}">${v}</option>`).join("");
   await loadSettings();
-  await Promise.all([loadOrders(),loadTrucks()]);
+  await Promise.all([loadOrders(),loadTrucks(),loadWarehouses()]);
   // Live updates: any change to orders or trucks refreshes the screen.
   let t1,t2;
   sb.channel("ops").on("postgres_changes",{event:"*",schema:"public",table:"orders"},()=>{clearTimeout(t1);t1=setTimeout(async()=>{await loadOrders();if(S.view==="dispatch")loadSuggest()},400)})
@@ -195,7 +222,7 @@ async function start(session){
 // ---------- tabs
 $("tabs").addEventListener("click",e=>{const v=e.target.dataset.v;if(!v)return;S.view=v;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));
-  ["orders","dispatch","trucks"].forEach(x=>$("v-"+x).hidden=x!==v);
+  ["orders","dispatch","trucks","warehouses"].forEach(x=>$("v-"+x).hidden=x!==v);
   if(v==="dispatch"){initMap();setTimeout(()=>map.invalidateSize(),50);loadSuggest()}
 });
 
@@ -211,9 +238,10 @@ function renderOrders(){
     <td>${esc(o.sender_name)}<div class="muted mono">${esc(o.sender_phone)}</div></td>
     <td>${esc(o.pickup_pincode)}<div class="muted" style="font-size:12px;max-width:220px">${esc(o.pickup_address)}</div></td>
     <td>${esc(o.delivery_pincode)}<div class="muted" style="font-size:12px">${esc(o.receiver_name)}</div></td>
+    <td>${o.origin_wh?`<span class="tag wh">${esc(o.origin_wh)}</span> → <span class="tag wh">${esc(o.dest_wh||"?")}</span>`:'<span class="tag bad">No warehouse</span>'}</td>
     <td>${o.charged_kg} kg</td><td>${inr(o.total)}</td>
     <td><select data-awb="${esc(o.awb)}" aria-label="Status of ${esc(o.awb)}">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}"${k===o.status?" selected":""}>${v}</option>`).join("")}</select></td>
-    <td class="mono">${esc(o.truck_no||"—")}</td></tr>`).join("")||'<tr><td colspan="9" class="muted">No orders match. New bookings from the customer site appear here automatically.</td></tr>';
+    <td class="mono">${esc(o.truck_no||"—")}</td></tr>`).join("")||'<tr><td colspan="10" class="muted">No orders match. New bookings from the customer site appear here automatically.</td></tr>';
 }
 $("oStatus").addEventListener("change",renderOrders);$("oSearch").addEventListener("input",renderOrders);
 $("oBody").addEventListener("change",async e=>{const awb=e.target.dataset.awb;if(!awb)return;
@@ -229,25 +257,39 @@ function initMap(){if(map)return;
 }
 let fitted=false;
 function renderDispatch(){
-  const fresh=(+$("dFresh").value||15)*60000, now=Date.now();
-  const usable=t=>t.status==="available"&&t.last_ping_at&&now-Date.parse(t.last_ping_at)<=fresh&&+t.load_kg<+t.capacity_kg;
+  const fresh=(+$("dFresh").value||15)*60000, now=Date.now(), wh=new Map((S.wh||[]).map(w=>[w.code,w]));
+  const busy=new Set(S.orders.filter(o=>["pickup_assigned","driver_accepted","picked_up"].includes(o.status)).map(o=>o.truck_no));
+  const usable=t=>t.status==="available"&&t.last_ping_at&&now-Date.parse(t.last_ping_at)<=fresh&&+t.load_kg<+t.capacity_kg&&!busy.has(t.truck_no);
   const byAwb=new Map(S.orders.map(o=>[o.awb,o])), byTruck=new Map(S.trucks.map(t=>[t.truck_no,t]));
   const ok=S.suggest.filter(s=>s.truck_no);
-  $("dStats").innerHTML=`<div class="stat"><span class="muted">Waiting for pickup</span><b>${S.suggest.length}</b></div><div class="stat"><span class="muted">Can allocate now</span><b>${ok.length}</b></div><div class="stat"><span class="muted">Trucks ready</span><b>${S.trucks.filter(usable).length} / ${S.trucks.length}</b></div>`;
-  $("dConfirm").disabled=!ok.length;$("dConfirm").textContent=ok.length?`Confirm ${ok.length} allocation${ok.length>1?"s":""}`:"Nothing to allocate";
-  $("dBody").innerHTML=S.suggest.map(s=>{const o=byAwb.get(s.awb)||{};
-    const loc=o.pickup_location_source==="map_pin"?'<span class="tag ok">Map pin</span>':o.pickup_location_source==="pincode_centre"?'<span class="tag warn">Pincode centre</span>':'<span class="tag bad">Unknown</span>';
-    return `<tr><td class="mono">${esc(s.awb)}</td><td>${esc(o.pickup_pincode)}</td><td>${loc}</td><td>${o.charged_kg??"—"} kg</td>
-    <td>${s.truck_no?`<span class="mono">${esc(s.truck_no)}</span>`:'<span class="tag bad">None</span>'}</td><td>${s.distance_km!=null?s.distance_km+" km":"—"}</td><td>${s.distance_km!=null?inr(Math.round((+S.settings.driver_pay_base||40)+(+S.settings.driver_pay_per_km||8)*s.distance_km)):"—"}</td><td>${esc(s.reason)}</td></tr>`}).join("")||'<tr><td colspan="8" class="muted">No orders are waiting for pickup.</td></tr>';
+  // Group suggestions into trips: truck + origin + destination warehouse. Unassigned parcels are grouped by route.
+  const trips=new Map();
+  S.suggest.forEach(s=>{const o=byAwb.get(s.awb)||{};const key=(s.truck_no||"none")+"|"+(o.origin_wh||"?")+"|"+(o.dest_wh||"?");
+    if(!trips.has(key))trips.set(key,{truck:s.truck_no,from:o.origin_wh,to:o.dest_wh,km:s.distance_km,rows:[]});trips.get(key).rows.push({s,o})});
+  const est=t=>{const a=wh.get(t.from),b=wh.get(t.to);const trip=a&&b?kmBetween(a.lat,a.lon,b.lat,b.lon):0;
+    return Math.round((+S.settings.trip_pay_base||300)+(+S.settings.trip_pay_per_km||3)*((+t.km||0)+trip))};
+  const tripCount=[...trips.values()].filter(t=>t.truck).length;
+  $("dStats").innerHTML=`<div class="stat"><span class="muted">Parcels waiting</span><b>${S.suggest.length}</b></div><div class="stat"><span class="muted">Trips ready to send</span><b>${tripCount}</b></div><div class="stat"><span class="muted">Trucks ready</span><b>${S.trucks.filter(usable).length} / ${S.trucks.length}</b></div><div class="stat"><span class="muted">Warehouses</span><b>${(S.wh||[]).filter(w=>w.active).length}</b></div>`;
+  $("dConfirm").disabled=!ok.length;$("dConfirm").textContent=ok.length?`Send ${tripCount} trip${tripCount>1?"s":""} (${ok.length} parcel${ok.length>1?"s":""})`:"Nothing to allocate";
+  const wn=c=>c?(wh.get(c)?.name||c):"—";
+  $("dBody").innerHTML=[...trips.values()].map(t=>{const kg=t.rows.reduce((a,r)=>a+(+r.o.charged_kg||0),0);
+    return `<tr class="trip"><td>${t.truck?"Trip":"Waiting"} · ${t.rows.length} parcel${t.rows.length>1?"s":""}</td><td>${esc(wn(t.from))}</td><td>${esc(wn(t.to))}</td><td>${kg} kg</td>
+      <td>${t.truck?`<span class="mono">${esc(t.truck)}</span>`:'<span class="tag bad">None</span>'}</td><td>${t.km!=null?t.km+" km":"—"}</td><td>${t.truck?inr(est(t)):"—"}</td><td>${esc(t.rows[0].s.reason)}</td></tr>`+
+      t.rows.map(({s,o})=>`<tr><td class="mono" style="padding-left:24px">${esc(s.awb)}</td><td></td><td></td><td>${o.charged_kg??"—"} kg</td><td></td><td></td><td></td><td class="muted">${s.reason!==t.rows[0].s.reason?esc(s.reason):""}</td></tr>`).join("")}).join("")
+    ||'<tr><td colspan="8" class="muted">No parcels are waiting for a truck.</td></tr>';
   if(!map)return; layer.clearLayers(); const pts=[];
+  const waiting={};S.orders.filter(o=>o.status==="booked").forEach(o=>{if(o.origin_wh)waiting[o.origin_wh]=(waiting[o.origin_wh]||0)+1});
+  // Suggestion lines: truck to origin warehouse
+  trips.forEach(t=>{const tr=t.truck&&byTruck.get(t.truck),w=wh.get(t.from);
+    if(tr&&w&&tr.last_lat!=null)L.polyline([[tr.last_lat,tr.last_lon],[w.lat,w.lon]],{color:"#2563EB",weight:2,dashArray:"6 5"}).addTo(layer)});
   S.trucks.forEach(t=>{if(t.last_lat==null)return;const u=usable(t);pts.push([t.last_lat,t.last_lon]);
     L.circleMarker([t.last_lat,t.last_lon],{radius:8,color:"#fff",weight:2,fillColor:u?"#2563EB":"#9AA3B2",fillOpacity:1})
-     .bindTooltip(`${t.truck_no} · ${t.status.replace("_"," ")} · ${Math.round(t.capacity_kg-t.load_kg)} kg free · GPS ${ago(t.last_ping_at)}`).addTo(layer)});
-  S.suggest.forEach(s=>{const o=byAwb.get(s.awb);if(!o||o.pickup_lat==null)return;pts.push([o.pickup_lat,o.pickup_lon]);
-    L.circleMarker([o.pickup_lat,o.pickup_lon],{radius:6,color:"#111",weight:1,fillColor:s.truck_no?"#F2A516":"#B91C1C",fillOpacity:1})
-     .bindTooltip(`${s.awb} · ${o.charged_kg} kg · ${s.reason}`).addTo(layer);
-    const t=s.truck_no&&byTruck.get(s.truck_no);
-    if(t)L.polyline([[o.pickup_lat,o.pickup_lon],[t.last_lat,t.last_lon]],{color:"#2563EB",weight:2,dashArray:"6 5"}).addTo(layer)});
+     .bindTooltip(`${t.truck_no} · ${busy.has(t.truck_no)?"on a trip":t.status.replace("_"," ")} · ${Math.round(t.capacity_kg-t.load_kg)} kg free · GPS ${ago(t.last_ping_at)}`).addTo(layer)});
+  // Warehouses drawn last so they sit on top and stand out
+  (S.wh||[]).filter(w=>w.active).forEach(w=>{pts.push([w.lat,w.lon]);const n=waiting[w.code]||0;
+    L.marker([w.lat,w.lon],{zIndexOffset:1000,icon:L.divIcon({className:"",iconSize:[0,0],iconAnchor:[13,13],
+      html:`<div class="wh-pin"><b>W</b><span>${esc(w.name)}</span>${n?`<em>${n}</em>`:""}</div>`})})
+     .bindTooltip(`${w.code} · ${w.name}, ${w.city} · ${n} parcel${n===1?"":"s"} waiting`).addTo(layer)});
   S.pts=pts;
   if(!fitted&&pts.length){map.fitBounds(pts,{padding:[30,30],maxZoom:12});fitted=true}
 }
@@ -258,7 +300,7 @@ $("dKm").addEventListener("change",loadSuggest);$("dFresh").addEventListener("ch
 $("dConfirm").addEventListener("click",async()=>{
   $("dConfirm").disabled=true;
   const {data,error}=await sb.rpc("confirm_allocations",{p_max_km:+$("dKm").value||null,p_fresh_min:+$("dFresh").value||null});
-  toast(error?error.message:`${data} pickup${data===1?"":"s"} allocated`);
+  toast(error?error.message:`${data} parcel${data===1?"":"s"} sent to trucks`);
   await Promise.all([loadOrders(),loadTrucks()]);loadSuggest();
 });
 $("dSave").addEventListener("click",async()=>{
@@ -268,6 +310,9 @@ $("dSave").addEventListener("click",async()=>{
 // ---------- trucks: where each truck is now, not raw GPS logs
 function kmBetween(a,b,c,d){const r=x=>x*Math.PI/180,h=Math.sin(r(c-a)/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2;return 12742*Math.asin(Math.sqrt(h))}
 function placeName(lat,lon){
+  let w=null;(S.wh||[]).forEach(x=>{const d=kmBetween(lat,lon,x.lat,x.lon);if(!w||d<w.d)w={x,d}});
+  if(w&&w.d<1)return `at ${w.x.name}`;
+  if(w&&w.d<30)return `${w.d.toFixed(1)} km from ${w.x.name}`;
   let best=null;(S.pins||[]).forEach(p=>{const d=kmBetween(lat,lon,p.lat,p.lon);if(!best||d<best.d)best={p,d}});
   return best&&best.d<8?`near ${best.p.area}, ${best.p.city}`:`${(+lat).toFixed(3)}, ${(+lon).toFixed(3)}`;
 }
@@ -307,6 +352,37 @@ $("addTruck").addEventListener("submit",async e=>{e.preventDefault();$("tErr").t
   $("addTruck").reset();$("tCap").value=1500;
   toast(placed?no+" added at pincode "+pc:no+" added. It shows on the map after its first GPS ping.");loadTrucks()});
 
+// ---------- warehouses
+function renderWarehouses(){
+  if(!$("wBody"))return;
+  const maxkm=+$("dKm").value||25, fresh=(+$("dFresh").value||15)*60000, now=Date.now();
+  $("wBody").innerHTML=(S.wh||[]).map(w=>{
+    const waiting=S.orders.filter(o=>o.status==="booked"&&o.origin_wh===w.code);
+    const near=S.trucks.filter(t=>t.last_lat!=null&&t.status==="available"&&t.last_ping_at&&now-Date.parse(t.last_ping_at)<=fresh&&kmBetween(w.lat,w.lon,t.last_lat,t.last_lon)<=maxkm);
+    return `<tr data-w="${esc(w.code)}"><td><span class="tag wh">${esc(w.code)}</span> <b>${esc(w.name)}</b><div class="muted" style="font-size:12px">${esc(w.address||"")}${w.pincode?" · "+esc(w.pincode):""}</div></td>
+    <td>${esc(w.city)}</td><td>${waiting.length?`<b>${waiting.length}</b> <span class="muted">(${waiting.reduce((a,o)=>a+ +o.charged_kg,0)} kg)</span>`:'<span class="muted">0</span>'}</td>
+    <td>${near.length?near.map(t=>`<span class="mono">${esc(t.truck_no)}</span>`).join(", "):`<span class="tag ${waiting.length?"bad":""}">None within ${maxkm} km</span>`}</td>
+    <td><a href="https://www.google.com/maps?q=${w.lat},${w.lon}" target="_blank" rel="noopener" class="mono">${(+w.lat).toFixed(4)}, ${(+w.lon).toFixed(4)}</a></td>
+    <td><input type="checkbox" data-active ${w.active?"checked":""} aria-label="${esc(w.code)} active"></td>
+    <td><button class="btn ghost" data-wmap>Show on map</button></td></tr>`}).join("")||'<tr><td colspan="7" class="muted">No warehouses yet. Add one below.</td></tr>';
+}
+$("wBody").addEventListener("change",async e=>{if(!e.target.matches("[data-active]"))return;const code=e.target.closest("tr").dataset.w;
+  const {error}=await sb.from("warehouses").update({active:e.target.checked}).eq("code",code);toast(error?error.message:code+(e.target.checked?" active":" paused"));loadWarehouses()});
+$("wBody").addEventListener("click",e=>{if(!e.target.matches("[data-wmap]"))return;const w=S.wh.find(x=>x.code===e.target.closest("tr").dataset.w);
+  document.querySelector('#tabs button[data-v="dispatch"]').click();setTimeout(()=>map.setView([w.lat,w.lon],13),120)});
+$("wHere").addEventListener("click",()=>{if(!navigator.geolocation){$("wErr").textContent="This browser can't share location.";return}
+  navigator.geolocation.getCurrentPosition(p=>{$("wLat").value=p.coords.latitude.toFixed(6);$("wLon").value=p.coords.longitude.toFixed(6)},()=>$("wErr").textContent="Location permission was refused.",{enableHighAccuracy:true,timeout:10000})});
+// Pasting "28.5355, 77.2750" from Google Maps fills both boxes
+$("wLat").addEventListener("paste",e=>{const t=(e.clipboardData||window.clipboardData).getData("text");const m=t.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);if(m){e.preventDefault();$("wLat").value=m[1];$("wLon").value=m[2]}});
+$("addWh").addEventListener("submit",async e=>{e.preventDefault();$("wErr").textContent="";
+  const code=$("wCode").value.trim().toUpperCase(),lat=+$("wLat").value,lon=+$("wLon").value,pin=$("wPin").value.trim();
+  if(!/^[A-Z]{3}\d{2}$/.test(code)){$("wErr").textContent="Code is 3 letters and 2 digits, like DEL02.";return}
+  if(!(lat>=6&&lat<=37&&lon>=68&&lon<=98)){$("wErr").textContent="Position must be in India. Paste latitude, longitude from Google Maps.";return}
+  if(pin&&!/^[1-9]\d{5}$/.test(pin)){$("wErr").textContent="Pincode must be 6 digits.";return}
+  const {error}=await sb.from("warehouses").insert({code,name:$("wName").value.trim(),city:$("wCity").value.trim(),pincode:pin||null,lat,lon});
+  if(error){$("wErr").textContent=error.code==="23505"?code+" already exists.":error.message;return}
+  $("addWh").reset();toast(code+" added");loadWarehouses();
+});
 boot();
 </script>
 </body>

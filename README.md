@@ -108,3 +108,20 @@ iPhone limit: Safari must stay open with the screen on while online.
 
 ## Database updates
 If your database was created before the driver page, run `supabase/migration_002_driver_jobs.sql` once in the SQL Editor.
+
+## Warehouses
+Trucks collect parcels from **warehouses**, not from customers' doors.
+
+- Every order is linked automatically to an **origin warehouse** (nearest to the pickup pin) and a **destination warehouse** (nearest to the delivery pincode).
+- **Dispatch** groups waiting parcels into **trips** (origin → destination warehouse) and sends the nearest free truck to the origin warehouse, filled up to its capacity.
+- **Driver pay per trip** = `trip_pay_base` + `trip_pay_per_km` × (truck to origin warehouse + origin to destination warehouse), split across the trip's parcels (settings table; example ₹300 + ₹3/km).
+- The driver gets one card per trip: Accept → Navigate to origin warehouse → **All parcels loaded** → Navigate to destination → **Unloaded**.
+- On the ops map, warehouses are magenta "W" markers; a yellow badge shows parcels waiting there.
+- Add or pause warehouses on the **Warehouses** tab. The 14 starting warehouses have approximate positions: check each one and correct it.
+
+## Database updates, in order
+Run once each in the Supabase SQL Editor, if your database is older than the feature:
+1. `supabase/fix_function_permissions.sql`
+2. `supabase/fix_awb_generator.sql`
+3. `supabase/migration_002_driver_jobs.sql`
+4. `supabase/migration_003_warehouses.sql`
