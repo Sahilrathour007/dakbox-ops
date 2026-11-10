@@ -81,7 +81,7 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
 <header class="top"><div class="in">
   <span class="brand">Dakbox<small>Operations</small></span>
   <nav class="tabs" id="tabs">
-    <button data-v="orders" class="on">Orders</button><button data-v="dispatch">Dispatch</button><button data-v="trucks">Trucks</button><button data-v="warehouses">Warehouses</button>
+    <button data-v="orders" class="on">Orders</button><button data-v="dispatch">Dispatch</button><button data-v="trucks">Trucks</button>
   </nav>
   <div class="who"><span id="whoEmail"></span><button class="btn ghost" id="logout" type="button">Sign out</button></div>
 </div></header>
@@ -112,6 +112,7 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
       <label>Zoom to<select id="dArea"><option value="">Everything</option><option value="28.60,77.15,11">Delhi NCR</option><option value="19.08,72.90,11">Mumbai</option><option value="18.52,73.86,12">Pune</option><option value="12.97,77.59,11">Bengaluru</option></select></label>
     </div>
     <div class="stats" id="dStats"></div>
+    <div class="banner" id="whNote" hidden></div>
     <div id="dmap"></div>
     <div class="legend"><span><i style="background:#C026D3;border-radius:3px"></i>Warehouse (yellow badge = parcels waiting)</span><span><i style="background:var(--accent)"></i>Truck ready</span><span><i style="background:#9AA3B2"></i>Truck not usable (old GPS, full, off duty, on a trip)</span><span>Dashed line: truck suggested for that warehouse</span></div>
     <div class="tw"><table>
@@ -141,26 +142,6 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
     </form>
   </section>
 
-  <!-- WAREHOUSES -->
-  <section id="v-warehouses" hidden style="display:flex;flex-direction:column;gap:14px">
-    <div class="tw"><table>
-      <thead><tr><th>Warehouse</th><th>City</th><th>Parcels waiting</th><th>Trucks within reach</th><th>Position</th><th>Active</th><th></th></tr></thead>
-      <tbody id="wBody"><tr><td colspan="7" class="muted">Loading warehouses…</td></tr></tbody>
-    </table></div>
-    <h2>Add a warehouse</h2>
-    <form class="bar card" id="addWh" style="flex-direction:row">
-      <label>Code<input id="wCode" placeholder="DEL02" maxlength="5" style="width:90px" required></label>
-      <label>Name<input id="wName" placeholder="Bawana Warehouse" required></label>
-      <label>City<input id="wCity" required style="width:130px"></label>
-      <label>Pincode<input id="wPin" inputmode="numeric" maxlength="6" style="width:100px"></label>
-      <label>Latitude<input id="wLat" inputmode="decimal" style="width:110px" required></label>
-      <label>Longitude<input id="wLon" inputmode="decimal" style="width:110px" required></label>
-      <button class="btn ghost" type="button" id="wHere">Use my location</button>
-      <button class="btn" type="submit">Add warehouse</button>
-      <p class="muted" style="flex-basis:100%;margin:0">Tip: in Google Maps, right-click the spot and click the numbers to copy them, then paste into Latitude. Both boxes fill in.</p>
-      <p class="err" id="wErr" style="flex-basis:100%;margin:0"></p>
-    </form>
-  </section>
 </main>
 </div>
 <div class="toast" id="toast" hidden></div>
@@ -195,8 +176,8 @@ $("login").addEventListener("submit",async e=>{
 $("logout").addEventListener("click",()=>sb.auth.signOut());
 
 // ---------- data
-async function loadOrders(){const {data,error}=await sb.from("orders").select("*").order("created_at",{ascending:false}).limit(500);if(!error){S.orders=data;renderOrders();renderTrucks();renderWarehouses();}}
-async function loadWarehouses(){const {data,error}=await sb.from("warehouses").select("*").order("code");if(!error){S.wh=data;renderWarehouses();renderTrucks();if(S.view==="dispatch")renderDispatch()}}
+async function loadOrders(){const {data,error}=await sb.from("orders").select("*").order("created_at",{ascending:false}).limit(500);if(!error){S.orders=data;renderOrders();renderTrucks();}}
+async function loadWarehouses(){const {data,error}=await sb.from("warehouses").select("*").order("code");if(error){S.wh=[];$("whNote").hidden=false;$("whNote").textContent="Warehouses are not set up in the database yet. In Supabase, SQL Editor, run supabase/migration_003_warehouses.sql, then reload this page.";return}if(!error){S.wh=data;$("whNote").hidden=data.length>0;$("whNote").textContent="No warehouses in the database yet. Add them in Supabase (table: warehouses).";renderTrucks();if(S.view==="dispatch")renderDispatch()}}
 async function loadTrucks(){const {data,error}=await sb.from("trucks").select("*").order("truck_no");if(!error){S.trucks=data;renderTrucks();}}
 async function loadSettings(){const {data}=await sb.from("settings").select("*").eq("id",1).maybeSingle();if(data)S.settings=data;$("dKm").value=S.settings.max_distance_km;$("dFresh").value=S.settings.gps_fresh_minutes}
 async function loadSuggest(){
@@ -222,7 +203,7 @@ async function start(session){
 // ---------- tabs
 $("tabs").addEventListener("click",e=>{const v=e.target.dataset.v;if(!v)return;S.view=v;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));
-  ["orders","dispatch","trucks","warehouses"].forEach(x=>$("v-"+x).hidden=x!==v);
+  ["orders","dispatch","trucks"].forEach(x=>$("v-"+x).hidden=x!==v);
   if(v==="dispatch"){initMap();setTimeout(()=>map.invalidateSize(),50);loadSuggest()}
 });
 
@@ -352,37 +333,6 @@ $("addTruck").addEventListener("submit",async e=>{e.preventDefault();$("tErr").t
   $("addTruck").reset();$("tCap").value=1500;
   toast(placed?no+" added at pincode "+pc:no+" added. It shows on the map after its first GPS ping.");loadTrucks()});
 
-// ---------- warehouses
-function renderWarehouses(){
-  if(!$("wBody"))return;
-  const maxkm=+$("dKm").value||25, fresh=(+$("dFresh").value||15)*60000, now=Date.now();
-  $("wBody").innerHTML=(S.wh||[]).map(w=>{
-    const waiting=S.orders.filter(o=>o.status==="booked"&&o.origin_wh===w.code);
-    const near=S.trucks.filter(t=>t.last_lat!=null&&t.status==="available"&&t.last_ping_at&&now-Date.parse(t.last_ping_at)<=fresh&&kmBetween(w.lat,w.lon,t.last_lat,t.last_lon)<=maxkm);
-    return `<tr data-w="${esc(w.code)}"><td><span class="tag wh">${esc(w.code)}</span> <b>${esc(w.name)}</b><div class="muted" style="font-size:12px">${esc(w.address||"")}${w.pincode?" · "+esc(w.pincode):""}</div></td>
-    <td>${esc(w.city)}</td><td>${waiting.length?`<b>${waiting.length}</b> <span class="muted">(${waiting.reduce((a,o)=>a+ +o.charged_kg,0)} kg)</span>`:'<span class="muted">0</span>'}</td>
-    <td>${near.length?near.map(t=>`<span class="mono">${esc(t.truck_no)}</span>`).join(", "):`<span class="tag ${waiting.length?"bad":""}">None within ${maxkm} km</span>`}</td>
-    <td><a href="https://www.google.com/maps?q=${w.lat},${w.lon}" target="_blank" rel="noopener" class="mono">${(+w.lat).toFixed(4)}, ${(+w.lon).toFixed(4)}</a></td>
-    <td><input type="checkbox" data-active ${w.active?"checked":""} aria-label="${esc(w.code)} active"></td>
-    <td><button class="btn ghost" data-wmap>Show on map</button></td></tr>`}).join("")||'<tr><td colspan="7" class="muted">No warehouses yet. Add one below.</td></tr>';
-}
-$("wBody").addEventListener("change",async e=>{if(!e.target.matches("[data-active]"))return;const code=e.target.closest("tr").dataset.w;
-  const {error}=await sb.from("warehouses").update({active:e.target.checked}).eq("code",code);toast(error?error.message:code+(e.target.checked?" active":" paused"));loadWarehouses()});
-$("wBody").addEventListener("click",e=>{if(!e.target.matches("[data-wmap]"))return;const w=S.wh.find(x=>x.code===e.target.closest("tr").dataset.w);
-  document.querySelector('#tabs button[data-v="dispatch"]').click();setTimeout(()=>map.setView([w.lat,w.lon],13),120)});
-$("wHere").addEventListener("click",()=>{if(!navigator.geolocation){$("wErr").textContent="This browser can't share location.";return}
-  navigator.geolocation.getCurrentPosition(p=>{$("wLat").value=p.coords.latitude.toFixed(6);$("wLon").value=p.coords.longitude.toFixed(6)},()=>$("wErr").textContent="Location permission was refused.",{enableHighAccuracy:true,timeout:10000})});
-// Pasting "28.5355, 77.2750" from Google Maps fills both boxes
-$("wLat").addEventListener("paste",e=>{const t=(e.clipboardData||window.clipboardData).getData("text");const m=t.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);if(m){e.preventDefault();$("wLat").value=m[1];$("wLon").value=m[2]}});
-$("addWh").addEventListener("submit",async e=>{e.preventDefault();$("wErr").textContent="";
-  const code=$("wCode").value.trim().toUpperCase(),lat=+$("wLat").value,lon=+$("wLon").value,pin=$("wPin").value.trim();
-  if(!/^[A-Z]{3}\d{2}$/.test(code)){$("wErr").textContent="Code is 3 letters and 2 digits, like DEL02.";return}
-  if(!(lat>=6&&lat<=37&&lon>=68&&lon<=98)){$("wErr").textContent="Position must be in India. Paste latitude, longitude from Google Maps.";return}
-  if(pin&&!/^[1-9]\d{5}$/.test(pin)){$("wErr").textContent="Pincode must be 6 digits.";return}
-  const {error}=await sb.from("warehouses").insert({code,name:$("wName").value.trim(),city:$("wCity").value.trim(),pincode:pin||null,lat,lon});
-  if(error){$("wErr").textContent=error.code==="23505"?code+" already exists.":error.message;return}
-  $("addWh").reset();toast(code+" added");loadWarehouses();
-});
 boot();
 </script>
 </body>

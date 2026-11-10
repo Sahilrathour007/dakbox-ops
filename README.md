@@ -117,7 +117,7 @@ Trucks collect parcels from **warehouses**, not from customers' doors.
 - **Driver pay per trip** = `trip_pay_base` + `trip_pay_per_km` × (truck to origin warehouse + origin to destination warehouse), split across the trip's parcels (settings table; example ₹300 + ₹3/km).
 - The driver gets one card per trip: Accept → Navigate to origin warehouse → **All parcels loaded** → Navigate to destination → **Unloaded**.
 - On the ops map, warehouses are magenta "W" markers; a yellow badge shows parcels waiting there.
-- Add or pause warehouses on the **Warehouses** tab. The 14 starting warehouses have approximate positions: check each one and correct it.
+- Warehouses are managed in Supabase: **Table Editor → warehouses** (add a row, edit lat/lon, or set `active` to false to pause one). The 14 starting warehouses have approximate positions: check each one and correct it.
 
 ## Database updates, in order
 Run once each in the Supabase SQL Editor, if your database is older than the feature:
