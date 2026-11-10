@@ -43,8 +43,9 @@ create table if not exists public.trucks (
 );
 
 -- AWB = 12 random digits starting with 7. Random, so nobody can guess other customers' AWBs.
-create or replace function public.new_awb() returns text language sql volatile as $$
-  select '7' || lpad(((('x' || encode(gen_random_bytes(6), 'hex'))::bit(48)::bigint) % 100000000000)::text, 11, '0')
+-- Uses gen_random_uuid(), built into Postgres, so it works wherever extensions are installed.
+create or replace function public.new_awb() returns text language sql volatile set search_path = pg_catalog as $$
+  select '7' || lpad(((('x' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 12))::bit(48)::bigint) % 100000000000)::text, 11, '0')
 $$;
 
 create table if not exists public.orders (
