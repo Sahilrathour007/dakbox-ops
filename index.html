@@ -75,7 +75,7 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
 <header class="top"><div class="in">
   <span class="brand">Dakbox<small>Operations</small></span>
   <nav class="tabs" id="tabs">
-    <button data-v="orders" class="on">Orders</button><button data-v="dispatch">Dispatch</button><button data-v="trucks">Trucks</button><button data-v="gps">GPS</button>
+    <button data-v="orders" class="on">Orders</button><button data-v="dispatch">Dispatch</button><button data-v="trucks">Trucks</button>
   </nav>
   <div class="who"><span id="whoEmail"></span><button class="btn ghost" id="logout" type="button">Sign out</button></div>
 </div></header>
@@ -109,54 +109,32 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
     <div id="dmap"></div>
     <div class="legend"><span><i style="background:var(--accent)"></i>Truck ready</span><span><i style="background:#9AA3B2"></i>Truck not usable (old GPS, full, off duty)</span><span><i style="background:#F2A516"></i>Pickup with a suggested truck</span><span><i style="background:var(--err)"></i>Pickup with no truck</span><span>Dashed line: suggestion</span></div>
     <div class="tw"><table>
-      <thead><tr><th>AWB</th><th>Pickup pincode</th><th>Location</th><th>Weight</th><th>Suggested truck</th><th>Distance</th><th>Why</th></tr></thead>
-      <tbody id="dBody"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
+      <thead><tr><th>AWB</th><th>Pickup pincode</th><th>Location</th><th>Weight</th><th>Suggested truck</th><th>Distance</th><th>Driver earns</th><th>Why</th></tr></thead>
+      <tbody id="dBody"><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
     </table></div>
   </section>
 
   <!-- TRUCKS -->
   <section id="v-trucks" hidden style="display:flex;flex-direction:column;gap:14px">
+    <div class="stats" id="tStats"></div>
+    <div class="tw"><table>
+      <thead><tr><th>Truck</th><th>Where now</th><th>Last seen</th><th>Status</th><th>Space free</th><th>Jobs now</th><th></th></tr></thead>
+      <tbody id="tBody"><tr><td colspan="7" class="muted">Loading trucks…</td></tr></tbody>
+    </table></div>
+    <p class="muted">Drivers open <a id="driverLink" href="driver.html" target="_blank" rel="noopener">the driver page</a> on their phone and go online. Their truck then shows here and gets pickups.</p>
+    <h2>Add a truck</h2>
     <form class="bar card" id="addTruck" style="flex-direction:row">
       <label>Truck no.<input id="tNo" placeholder="DL01AB1234" maxlength="12" required></label>
       <label>Driver<input id="tDriver" required></label>
       <label>Driver mobile<input id="tPhone" maxlength="10"></label>
       <label>Capacity (kg)<input id="tCap" type="number" min="50" max="40000" value="1500" style="width:110px"></label>
-      <label>GPS device ID (IMEI)<input id="tImei"></label>
+      <label>GPS tracker ID (optional)<input id="tImei" placeholder="only if fitted"></label>
       <label>Now near pincode<input id="tPin" inputmode="numeric" maxlength="6" style="width:110px" placeholder="optional"></label>
       <button class="btn" type="submit">Add truck</button>
       <p class="err" id="tErr" style="flex-basis:100%;margin:0"></p>
     </form>
-    <div class="tw"><table>
-      <thead><tr><th>Truck</th><th>Driver</th><th>Capacity</th><th>Loaded</th><th>Status</th><th>GPS device</th><th>Last GPS</th><th>Speed</th><th></th></tr></thead>
-      <tbody id="tBody"><tr><td colspan="9" class="muted">Loading trucks…</td></tr></tbody>
-    </table></div>
   </section>
 
-  <!-- GPS -->
-  <section id="v-gps" hidden style="display:flex;flex-direction:column;gap:14px">
-    <div class="card">
-      <h2>Test without real trackers</h2>
-      <p>Sends one made-up GPS position for every truck, moved 0.3 to 1.8 km from its last spot. Off-duty trucks stay put. Saved with source "simulated".</p>
-      <div><button class="btn" id="sim" type="button">Simulate one GPS ping per truck</button></div>
-    </div>
-    <div class="card">
-      <h2>Use a phone as a tracker</h2>
-      <p>Open the driver page on the driver's phone, sign in, pick the truck and tap Start. It sends the phone's location as that truck every 30 seconds while the page stays open.</p>
-      <p><a href="driver.html" target="_blank" rel="noopener">Open driver page</a> <span class="muted mono" id="driverUrl"></span></p>
-    </div>
-    <div class="card">
-      <h2>Connect real trackers</h2>
-      <p>Give your GPS vendor this address and key. They send each position as it arrives. Each truck needs its device ID (IMEI) filled in on the Trucks tab.</p>
-      <pre id="ingestUrl"></pre>
-      <pre>POST, header  x-ingest-key: &lt;your INGEST_KEY&gt;
-{ "device_id": "868123045678901", "lat": 28.545, "lon": 77.273,
-  "speed_kmph": 18, "time": "2026-11-10T09:42:10+05:30" }</pre>
-      <p class="muted">If a vendor can't push, ask for their "last location" API and pull it every minute with a scheduled job that posts to the same address.</p>
-    </div>
-    <div class="card"><h2>Latest pings</h2><div class="tw" style="max-height:360px"><table style="min-width:600px">
-      <thead><tr><th>Truck</th><th>Time</th><th>Lat, lon</th><th>Speed</th><th>Source</th><th>Flag</th></tr></thead>
-      <tbody id="pBody"></tbody></table></div></div>
-  </section>
 </main>
 </div>
 <div class="toast" id="toast" hidden></div>
@@ -170,7 +148,7 @@ const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&g
 const inr=n=>"₹"+Number(n).toLocaleString("en-IN");
 const ago=t=>{if(!t)return"never";const m=Math.round((Date.now()-Date.parse(t))/60000);return m<1?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"};
 const toast=m=>{const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,2600)};
-const STATUS={booked:"Booked",pickup_assigned:"Pickup assigned",picked_up:"Picked up",at_origin_hub:"At origin hub",in_transit:"In transit",at_destination_hub:"At destination hub",out_for_delivery:"Out for delivery",delivered:"Delivered",cancelled:"Cancelled"};
+const STATUS={booked:"Booked",pickup_assigned:"Offered to driver",driver_accepted:"Driver on the way",picked_up:"Picked up",at_origin_hub:"At origin hub",in_transit:"In transit",at_destination_hub:"At destination hub",out_for_delivery:"Out for delivery",delivered:"Delivered",cancelled:"Cancelled"};
 const cfg=window.DAKBOX||{};
 const sb=cfg.SUPABASE_URL&&cfg.SUPABASE_ANON_KEY?supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY):null;
 const S={orders:[],trucks:[],settings:{max_distance_km:25,gps_fresh_minutes:15},suggest:[],view:"orders",started:false};
@@ -191,7 +169,7 @@ $("login").addEventListener("submit",async e=>{
 $("logout").addEventListener("click",()=>sb.auth.signOut());
 
 // ---------- data
-async function loadOrders(){const {data,error}=await sb.from("orders").select("*").order("created_at",{ascending:false}).limit(500);if(!error){S.orders=data;renderOrders();}}
+async function loadOrders(){const {data,error}=await sb.from("orders").select("*").order("created_at",{ascending:false}).limit(500);if(!error){S.orders=data;renderOrders();renderTrucks();}}
 async function loadTrucks(){const {data,error}=await sb.from("trucks").select("*").order("truck_no");if(!error){S.trucks=data;renderTrucks();}}
 async function loadSettings(){const {data}=await sb.from("settings").select("*").eq("id",1).maybeSingle();if(data)S.settings=data;$("dKm").value=S.settings.max_distance_km;$("dFresh").value=S.settings.gps_fresh_minutes}
 async function loadSuggest(){
@@ -199,14 +177,11 @@ async function loadSuggest(){
   if(error){toast(error.message);return}
   S.suggest=data||[];renderDispatch();
 }
-async function loadPings(){const {data}=await sb.from("gps_pings").select("*").order("received_at",{ascending:false}).limit(100);
-  $("pBody").innerHTML=(data||[]).map(p=>`<tr><td class="mono">${esc(p.truck_no)}</td><td>${new Date(p.recorded_at).toLocaleString("en-IN")}</td><td class="mono">${(+p.lat).toFixed(5)}, ${(+p.lon).toFixed(5)}</td><td>${p.speed_kmph??"—"}</td><td>${esc(p.source)}</td><td>${p.flag?`<span class="tag bad">${esc(p.flag)}</span>`:""}</td></tr>`).join("")||'<tr><td colspan="6" class="muted">No pings yet.</td></tr>'}
 
 async function start(session){
   if(S.started)return;S.started=true;
   $("app").hidden=false;$("whoEmail").textContent=session.user.email;
-  $("driverUrl").textContent=new URL("driver.html",location.href).href;
-  $("ingestUrl").textContent=cfg.SUPABASE_URL.replace(/\/$/,"")+"/functions/v1/gps-ingest";
+  sb.from("pincodes").select("pincode,area,city,lat,lon").then(r=>{S.pins=r.data||[];renderTrucks()});
   $("oStatus").innerHTML='<option value="">All</option>'+Object.entries(STATUS).map(([k,v])=>`<option value="${k}">${v}</option>`).join("");
   await loadSettings();
   await Promise.all([loadOrders(),loadTrucks()]);
@@ -220,9 +195,8 @@ async function start(session){
 // ---------- tabs
 $("tabs").addEventListener("click",e=>{const v=e.target.dataset.v;if(!v)return;S.view=v;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));
-  ["orders","dispatch","trucks","gps"].forEach(x=>$("v-"+x).hidden=x!==v);
+  ["orders","dispatch","trucks"].forEach(x=>$("v-"+x).hidden=x!==v);
   if(v==="dispatch"){initMap();setTimeout(()=>map.invalidateSize(),50);loadSuggest()}
-  if(v==="gps")loadPings();
 });
 
 // ---------- orders
@@ -264,7 +238,7 @@ function renderDispatch(){
   $("dBody").innerHTML=S.suggest.map(s=>{const o=byAwb.get(s.awb)||{};
     const loc=o.pickup_location_source==="map_pin"?'<span class="tag ok">Map pin</span>':o.pickup_location_source==="pincode_centre"?'<span class="tag warn">Pincode centre</span>':'<span class="tag bad">Unknown</span>';
     return `<tr><td class="mono">${esc(s.awb)}</td><td>${esc(o.pickup_pincode)}</td><td>${loc}</td><td>${o.charged_kg??"—"} kg</td>
-    <td>${s.truck_no?`<span class="mono">${esc(s.truck_no)}</span>`:'<span class="tag bad">None</span>'}</td><td>${s.distance_km!=null?s.distance_km+" km":"—"}</td><td>${esc(s.reason)}</td></tr>`}).join("")||'<tr><td colspan="7" class="muted">No orders are waiting for pickup.</td></tr>';
+    <td>${s.truck_no?`<span class="mono">${esc(s.truck_no)}</span>`:'<span class="tag bad">None</span>'}</td><td>${s.distance_km!=null?s.distance_km+" km":"—"}</td><td>${s.distance_km!=null?inr(Math.round((+S.settings.driver_pay_base||40)+(+S.settings.driver_pay_per_km||8)*s.distance_km)):"—"}</td><td>${esc(s.reason)}</td></tr>`}).join("")||'<tr><td colspan="8" class="muted">No orders are waiting for pickup.</td></tr>';
   if(!map)return; layer.clearLayers(); const pts=[];
   S.trucks.forEach(t=>{if(t.last_lat==null)return;const u=usable(t);pts.push([t.last_lat,t.last_lon]);
     L.circleMarker([t.last_lat,t.last_lon],{radius:8,color:"#fff",weight:2,fillColor:u?"#2563EB":"#9AA3B2",fillOpacity:1})
@@ -291,21 +265,35 @@ $("dSave").addEventListener("click",async()=>{
   const {error}=await sb.from("settings").update({max_distance_km:+$("dKm").value,gps_fresh_minutes:+$("dFresh").value}).eq("id",1);
   toast(error?error.message:"Saved as default for everyone")});
 
-// ---------- trucks
+// ---------- trucks: where each truck is now, not raw GPS logs
+function kmBetween(a,b,c,d){const r=x=>x*Math.PI/180,h=Math.sin(r(c-a)/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2;return 12742*Math.asin(Math.sqrt(h))}
+function placeName(lat,lon){
+  let best=null;(S.pins||[]).forEach(p=>{const d=kmBetween(lat,lon,p.lat,p.lon);if(!best||d<best.d)best={p,d}});
+  return best&&best.d<8?`near ${best.p.area}, ${best.p.city}`:`${(+lat).toFixed(3)}, ${(+lon).toFixed(3)}`;
+}
 function renderTrucks(){
-  const fresh=(+$("dFresh").value||15)*60000;
-  $("tBody").innerHTML=S.trucks.map(t=>{const old=!t.last_ping_at||Date.now()-Date.parse(t.last_ping_at)>fresh;
-    return `<tr data-t="${esc(t.truck_no)}"><td class="mono">${esc(t.truck_no)}</td><td>${esc(t.driver_name)}<div class="muted mono">${esc(t.driver_phone||"")}</div></td>
-    <td>${(+t.capacity_kg).toLocaleString("en-IN")} kg</td><td>${Math.round(t.load_kg).toLocaleString("en-IN")} kg</td>
-    <td><select data-f="status" aria-label="Status of ${esc(t.truck_no)}">${["available","full","off_duty"].map(s=>`<option value="${s}"${s===t.status?" selected":""}>${s.replace("_"," ")}</option>`).join("")}</select></td>
-    <td><input data-f="gps_device_id" value="${esc(t.gps_device_id||"")}" placeholder="IMEI" style="width:150px" aria-label="GPS device of ${esc(t.truck_no)}"></td>
-    <td><span class="tag ${old?"bad":"ok"}">${ago(t.last_ping_at)}</span></td><td>${t.last_speed_kmph??"—"}</td>
-    <td><button class="btn ghost" data-unload ${+t.load_kg>0?"":"disabled"}>Unload</button></td></tr>`}).join("")||'<tr><td colspan="9" class="muted">No trucks yet. Add your first truck above.</td></tr>';
+  const fresh=(+$("dFresh").value||15)*60000, now=Date.now();
+  const jobs=t=>S.orders.filter(o=>o.truck_no===t.truck_no);
+  const live=t=>t.last_ping_at&&now-Date.parse(t.last_ping_at)<=fresh;
+  const ready=S.trucks.filter(t=>t.status==="available"&&live(t)).length;
+  $("tStats").innerHTML=`<div class="stat"><span class="muted">Ready for pickups</span><b>${ready}</b></div><div class="stat"><span class="muted">On a job</span><b>${S.trucks.filter(t=>jobs(t).some(o=>["driver_accepted","picked_up"].includes(o.status))).length}</b></div><div class="stat"><span class="muted">Offline or no signal</span><b>${S.trucks.filter(t=>t.status==="off_duty"||!live(t)).length}</b></div>`;
+  $("tBody").innerHTML=S.trucks.map(t=>{
+    const j=jobs(t), offered=j.filter(o=>o.status==="pickup_assigned").length, active=j.filter(o=>["driver_accepted","picked_up"].includes(o.status)).length;
+    const age=t.last_ping_at?now-Date.parse(t.last_ping_at):Infinity;
+    const seen=age<=2*60000?'<span class="tag ok">Live</span>':age<=fresh?`<span class="tag ok">${ago(t.last_ping_at)}</span>`:t.last_ping_at?`<span class="tag bad">Signal lost · ${ago(t.last_ping_at)}</span>`:'<span class="tag">Never</span>';
+    const where=t.last_lat!=null?`<a href="https://www.google.com/maps?q=${t.last_lat},${t.last_lon}" target="_blank" rel="noopener">${esc(placeName(t.last_lat,t.last_lon))}</a>`:'<span class="muted">Not known yet</span>';
+    const free=Math.max(0,Math.round(t.capacity_kg-t.load_kg));
+    return `<tr data-t="${esc(t.truck_no)}"><td><b class="mono">${esc(t.truck_no)}</b><div class="muted">${esc(t.driver_name)}${t.driver_phone?` · <a href="tel:${esc(t.driver_phone)}">${esc(t.driver_phone)}</a>`:""}</div></td>
+    <td>${where}</td><td>${seen}</td>
+    <td><select data-f="status" aria-label="Status of ${esc(t.truck_no)}">${[["available","Available"],["full","Full"],["off_duty","Off duty"]].map(([v,l])=>`<option value="${v}"${v===t.status?" selected":""}>${l}</option>`).join("")}</select></td>
+    <td>${free.toLocaleString("en-IN")} kg <span class="muted">of ${(+t.capacity_kg).toLocaleString("en-IN")}</span></td>
+    <td>${active?`<span class="tag blue">${active} active</span> `:""}${offered?`<span class="tag warn">${offered} offered</span>`:""}${!active&&!offered?'<span class="muted">—</span>':""}</td>
+    <td>${t.last_lat!=null?'<button class="btn ghost" data-map>Show on map</button>':""}</td></tr>`}).join("")||'<tr><td colspan="7" class="muted">No trucks yet. Add your first truck below.</td></tr>';
 }
 $("tBody").addEventListener("change",async e=>{const f=e.target.dataset.f;if(!f)return;const no=e.target.closest("tr").dataset.t;
-  const v=e.target.value.trim()||null;const {error}=await sb.from("trucks").update({[f]:v}).eq("truck_no",no);toast(error?error.message:"Saved "+no)});
-$("tBody").addEventListener("click",async e=>{if(!e.target.matches("[data-unload]"))return;const no=e.target.closest("tr").dataset.t;
-  const {error}=await sb.from("trucks").update({load_kg:0}).eq("truck_no",no);toast(error?error.message:no+" unloaded")});
+  const {error}=await sb.from("trucks").update({[f]:e.target.value}).eq("truck_no",no);toast(error?error.message:"Saved "+no)});
+$("tBody").addEventListener("click",e=>{if(!e.target.matches("[data-map]"))return;const t=S.trucks.find(x=>x.truck_no===e.target.closest("tr").dataset.t);
+  document.querySelector('#tabs button[data-v="dispatch"]').click();setTimeout(()=>{map.setView([t.last_lat,t.last_lon],14)},120)});
 $("addTruck").addEventListener("submit",async e=>{e.preventDefault();$("tErr").textContent="";
   const no=$("tNo").value.toUpperCase().replace(/[\s-]/g,""),ph=$("tPhone").value.trim();
   if(!/^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{4}$/.test(no)){$("tErr").textContent="Enter a truck number like DL01AB1234.";return}
@@ -319,14 +307,6 @@ $("addTruck").addEventListener("submit",async e=>{e.preventDefault();$("tErr").t
   $("addTruck").reset();$("tCap").value=1500;
   toast(placed?no+" added at pincode "+pc:no+" added. It shows on the map after its first GPS ping.");loadTrucks()});
 
-// ---------- GPS simulator
-$("sim").addEventListener("click",async()=>{
-  const rows=S.trucks.filter(t=>t.last_lat!=null).map(t=>{const move=t.status!=="off_duty",d=move?0.3+Math.random()*1.5:0,a=Math.random()*2*Math.PI;
-    return{truck_no:t.truck_no,lat:+(t.last_lat+d/111.32*Math.cos(a)).toFixed(6),lon:+(t.last_lon+d/(111.32*Math.cos(t.last_lat*Math.PI/180))*Math.sin(a)).toFixed(6),speed_kmph:move?Math.round(5+Math.random()*30):0,recorded_at:new Date().toISOString(),source:"simulated"}});
-  if(!rows.length){toast("No truck has a first position yet. Insert one ping per truck (see README).");return}
-  const {error}=await sb.from("gps_pings").insert(rows);
-  toast(error?error.message:`Sent ${rows.length} pings`);if(!error){await loadTrucks();loadPings()}
-});
 boot();
 </script>
 </body>

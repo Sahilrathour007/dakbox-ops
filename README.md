@@ -61,7 +61,7 @@ supabase secrets set INGEST_KEY=make-up-a-long-random-string
 2. In the ops site, **Trucks** tab, fill in each truck's **GPS device ID (IMEI)**.
 3. Give your GPS vendor the address shown on the ops **GPS** tab, plus the `INGEST_KEY`.
    Every ping they send updates the truck's position on the dispatch map.
-4. Until then, use **Simulate one GPS ping per truck** on the GPS tab.
+4. Until then, drivers can share their phone's location from the driver page (below).
 
 ---
 
@@ -94,3 +94,17 @@ The database and both sites were run end to end on a local Postgres with the sam
 quote, booking, validation messages, random AWBs, tracking without personal data, customers blocked from tables,
 staff login, allocation with reasons, confirm, adding a truck, simulated GPS, status change seen by the customer.
 **Not tested here:** a live Supabase project, real map tiles, and the GPS Edge Function deployed on Supabase.
+
+## Driver page (phone)
+`driver.html`, e.g. https://sahilrathour007.github.io/dakbox-ops/driver.html
+
+1. Driver signs in, picks their truck once, taps **Online**. The phone's location is shared every 30 seconds in the background, and the truck shows as available.
+2. A pickup offer shows **what they earn**, **where** and **how far**. **Accept** or **Decline** (a declined job goes back for re-allocation).
+3. After accepting: **Navigate** (Google Maps), **Call** the sender, then **Parcel picked up**, then **Dropped at hub**.
+4. **Offline** stops location sharing and marks the truck off duty.
+
+Driver pay = `driver_pay_base` + `driver_pay_per_km` x distance to pickup (settings table; example ₹40 + ₹8/km).
+iPhone limit: Safari must stay open with the screen on while online.
+
+## Database updates
+If your database was created before the driver page, run `supabase/migration_002_driver_jobs.sql` once in the SQL Editor.

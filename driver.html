@@ -7,62 +7,72 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Dakbox Driver</title>
 <style>
-/* Phone-first: one big button, readable in a truck cab. */
-:root{--bg:#0F172A;--card:#1E293B;--ink:#F1F5F9;--muted:#94A3B8;--line:#334155;--go:#22C55E;--stop:#EF4444;--warn:#F59E0B}
+/* Driver app: one job at a time, big buttons, money first. */
+:root{--bg:#0F172A;--card:#1E293B;--ink:#F1F5F9;--muted:#94A3B8;--line:#334155;--go:#22C55E;--gold:#FBBF24;--stop:#F87171;--blue:#60A5FA}
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 -apple-system,system-ui,"Segoe UI",sans-serif}
-main{max-width:480px;margin:0 auto;padding:max(20px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 40px max(16px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:16px}
-h1{font-size:24px;margin:0} p{margin:0} .muted{color:var(--muted);font-size:15px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.4 -apple-system,system-ui,"Segoe UI",sans-serif}
+main{max-width:480px;margin:0 auto;padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 40px max(16px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:14px}
+h1{font-size:22px;margin:0} h2{font-size:15px;margin:0;color:var(--muted);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+p{margin:0} .muted{color:var(--muted);font-size:15px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px}
 label{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--muted)}
 input,select{font:17px -apple-system,system-ui,sans-serif;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px}
-.btn{font:700 18px -apple-system,system-ui,sans-serif;border:0;border-radius:12px;padding:16px;width:100%;cursor:pointer;color:#0B1220;background:var(--go)}
-.btn.stop{background:var(--stop);color:#fff} .btn.ghost{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:500;font-size:15px;padding:10px}
-.big{font-size:40px;font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
-.row{display:flex;justify-content:space-between;gap:10px;font-size:15px}
-.row span:last-child{font-variant-numeric:tabular-nums;text-align:right}
-.status{display:flex;align-items:center;gap:10px;font-weight:700}
-.dot{width:14px;height:14px;border-radius:50%;background:var(--muted)}
-.on .dot{background:var(--go);box-shadow:0 0 0 6px rgba(34,197,94,.25)}
-.err{color:#FCA5A5;font-size:15px}
-.warn{background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);border-radius:10px;padding:12px;font-size:14px}
+.btn{font:700 18px -apple-system,system-ui,sans-serif;border:0;border-radius:12px;padding:16px;width:100%;cursor:pointer;color:#06210F;background:var(--go);text-align:center;text-decoration:none;display:block}
+.btn.blue{background:var(--blue);color:#0B1A33} .btn.light{background:#334155;color:var(--ink)}
+.btn.text{background:none;color:var(--muted);font-weight:500;font-size:15px;padding:8px}
+.btn[disabled]{opacity:.5}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.truck{font-weight:800;font-size:20px;letter-spacing:.02em}
+.sw{display:flex;align-items:center;gap:10px;background:#334155;border:0;border-radius:999px;padding:6px 14px 6px 6px;color:var(--ink);font:700 15px -apple-system,system-ui,sans-serif;cursor:pointer}
+.sw i{width:26px;height:26px;border-radius:50%;background:var(--muted)}
+.sw.on{background:#14532D} .sw.on i{background:var(--go)}
+.card.earn{flex-direction:row;justify-content:space-between;align-items:center;padding:12px 18px}
+.earn b{font-size:28px;color:var(--gold);font-variant-numeric:tabular-nums}
+.job.offer{border-color:var(--gold);box-shadow:0 0 0 2px rgba(251,191,36,.25)}
+.area{font-size:26px;font-weight:800;line-height:1.15}
+.pay{font-size:40px;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums}
+.facts{display:flex;gap:18px;flex-wrap:wrap;font-size:15px;color:var(--muted)} .facts b{color:var(--ink)}
+.addr{font-size:16px}
+.note{border-radius:10px;padding:10px 12px;font-size:14px;background:rgba(248,113,113,.12);color:#FECACA}
+.empty{text-align:center;padding:28px 18px}
 [hidden]{display:none!important}
 </style>
 </head>
 <body>
 <main>
-  <h1>Dakbox Driver</h1>
-
   <div id="setup" class="card" hidden><p>Not connected. Fill in config.js.</p></div>
 
+  <!-- Sign in -->
   <form id="login" class="card" hidden>
-    <p class="muted">Sign in with your Dakbox staff login.</p>
+    <h1>Dakbox Driver</h1>
     <label>Email<input id="email" type="email" autocomplete="username" required></label>
     <label>Password<input id="pw" type="password" autocomplete="current-password" required></label>
     <button class="btn" type="submit">Sign in</button>
-    <p class="err" id="loginErr"></p>
+    <p class="note" id="loginErr" hidden></p>
   </form>
 
-  <section id="app" hidden style="display:flex;flex-direction:column;gap:16px">
-    <div class="card">
-      <label>This phone is in truck<select id="truck"></select></label>
-      <p class="muted" id="noTrucks" hidden>No trucks yet. Add one on the ops site, Trucks tab, then reload.</p>
-      <button class="btn" id="go" type="button">Start sharing location</button>
-      <p class="err" id="err"></p>
-    </div>
+  <!-- Pick truck (first time) -->
+  <div id="pick" class="card" hidden>
+    <h1>Which truck are you driving?</h1>
+    <select id="truck" aria-label="Truck"></select>
+    <button class="btn" id="pickGo" type="button">Continue</button>
+  </div>
 
-    <div class="card" id="live">
-      <div class="status" id="state"><span class="dot"></span><span id="stateText">Not sharing</span></div>
-      <div class="big" id="ago">—</div>
-      <p class="muted">since the last position was sent</p>
-      <div class="row"><span>Positions sent</span><span id="sent">0</span></div>
-      <div class="row"><span>Accuracy</span><span id="acc">—</span></div>
-      <div class="row"><span>Speed</span><span id="spd">—</span></div>
-      <div class="row"><span>Position</span><span id="pos">—</span></div>
+  <!-- Main -->
+  <section id="app" hidden style="display:flex;flex-direction:column;gap:14px">
+    <div class="top">
+      <span class="truck" id="truckNo"></span>
+      <button class="sw" id="online" type="button" aria-pressed="false"><i></i><span>Offline</span></button>
     </div>
+    <p class="note" id="net" hidden></p>
 
-    <div class="warn">Keep this page open and the screen on. iPhone stops sharing location when Safari is in the background or the phone locks.</div>
-    <button class="btn ghost" id="logout" type="button">Sign out</button>
+    <div class="card earn"><span class="muted">Today's earnings<br><span id="doneCount">0 pickups</span></span><b id="earned">₹0</b></div>
+
+    <div id="jobs"></div>
+
+    <button class="btn text" id="change" type="button">Change truck</button>
+    <button class="btn text" id="logout" type="button">Sign out</button>
   </section>
 </main>
 
@@ -70,77 +80,140 @@ input,select{font:17px -apple-system,system-ui,sans-serif;color:var(--ink);backg
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const inr=n=>"₹"+Math.round(+n||0).toLocaleString("en-IN");
 const cfg=window.DAKBOX||{};
 const sb=cfg.SUPABASE_URL&&cfg.SUPABASE_ANON_KEY?supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY):null;
-const SEND_EVERY_MS=30000;          // one position every 30 seconds
-let watchId=null,last=null,lastSentAt=0,sent=0,wakeLock=null,sending=false,tick=null;
+const SEND_EVERY_MS=30000, REFRESH_MS=15000;
+const S={truck:null,online:false,pos:null,watch:null,lastSent:0,pins:[],jobs:[],busy:false};
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
 
+function netErr(msg){$("net").hidden=!msg;$("net").textContent=msg||""}
+// Every database call goes through here: shows a plain message instead of "Failed to fetch".
+async function q(promise){
+  try{const r=await promise; if(r.error)throw r.error; netErr(""); return r.data}
+  catch(e){netErr(/fetch|network/i.test(e.message||"")?"No internet connection. Retrying…":(e.message||"Something went wrong"));throw e}
+}
+
+// ---------- sign in and truck
 async function boot(){
   if(!sb){$("setup").hidden=false;return}
   const {data:{session}}=await sb.auth.getSession();
-  session?start():$("login").hidden=false;
+  session?afterLogin():$("login").hidden=false;
 }
 $("login").addEventListener("submit",async e=>{
-  e.preventDefault();$("loginErr").textContent="";
+  e.preventDefault();$("loginErr").hidden=true;
   const {error}=await sb.auth.signInWithPassword({email:$("email").value.trim(),password:$("pw").value});
-  if(error){$("loginErr").textContent="Wrong email or password.";return}
-  $("login").hidden=true;start();
+  if(error){$("loginErr").hidden=false;$("loginErr").textContent=/fetch/i.test(error.message)?"No internet connection.":"Wrong email or password.";return}
+  $("login").hidden=true;afterLogin();
 });
-$("logout").addEventListener("click",async()=>{stop();await sb.auth.signOut();location.reload()});
+async function afterLogin(){
+  try{S.pins=await q(sb.from("pincodes").select("pincode,area,city,lat,lon"))}catch(e){S.pins=[]}
+  const saved=store.get("dakbox_truck");
+  if(saved){S.truck=saved;showApp()}else showPick();
+}
+async function showPick(){
+  $("app").hidden=true;$("pick").hidden=false;
+  let trucks=[];
+  try{trucks=await q(sb.from("trucks").select("truck_no,driver_name").order("truck_no"))}catch(e){setTimeout(showPick,5000);return}
+  if(!trucks.length){$("truck").innerHTML='<option value="">No trucks yet. Ask the office to add yours.</option>';$("pickGo").disabled=true;return}
+  $("truck").innerHTML=trucks.map(t=>`<option value="${esc(t.truck_no)}">${esc(t.truck_no)} · ${esc(t.driver_name)}</option>`).join("");
+  $("pickGo").disabled=false;
+}
+$("pickGo").addEventListener("click",()=>{S.truck=$("truck").value;if(!S.truck)return;store.set("dakbox_truck",S.truck);showApp()});
+$("change").addEventListener("click",()=>{goOffline();store.del("dakbox_truck");S.truck=null;showPick()});
+$("logout").addEventListener("click",async()=>{await goOffline();store.del("dakbox_truck");await sb.auth.signOut();location.reload()});
 
-async function start(){
-  $("app").hidden=false;
-  const {data,error}=await sb.from("trucks").select("truck_no,driver_name").order("truck_no");
-  if(error){$("err").textContent=error.message;return}
-  if(!data.length){$("noTrucks").hidden=false;$("go").disabled=true;return}
-  $("truck").innerHTML=data.map(t=>`<option value="${t.truck_no}">${t.truck_no} · ${t.driver_name.replace(/</g,"&lt;")}</option>`).join("");
-  try{const saved=localStorage.getItem("dakbox_truck");if(saved&&data.some(t=>t.truck_no===saved))$("truck").value=saved}catch(e){}
+function showApp(){
+  $("pick").hidden=true;$("app").hidden=false;$("truckNo").textContent=S.truck;
+  loadJobs();setInterval(loadJobs,REFRESH_MS);
+  if(store.get("dakbox_online")==="1")goOnline();
 }
 
-$("go").addEventListener("click",()=>watchId===null?share():stop());
-
-function share(){
-  $("err").textContent="";
-  if(!("geolocation" in navigator)){$("err").textContent="This browser can't share location.";return}
-  try{localStorage.setItem("dakbox_truck",$("truck").value)}catch(e){}
-  $("truck").disabled=true;$("go").textContent="Stop sharing";$("go").classList.add("stop");
-  $("live").classList.add("on");$("stateText").textContent="Waiting for GPS…";
+// ---------- online / offline (location runs in the background while online)
+$("online").addEventListener("click",()=>S.online?goOffline():goOnline());
+async function goOnline(){
+  if(!("geolocation" in navigator)){netErr("This phone can't share location.");return}
+  S.online=true;store.set("dakbox_online","1");paintSwitch();
+  S.watch=navigator.geolocation.watchPosition(p=>{S.pos=p;netErr("");if(Date.now()-S.lastSent>=SEND_EVERY_MS)sendPos();renderJobs()},
+    e=>{netErr(e.code===1?"Location is off. On iPhone: Settings → Privacy & Security → Location Services → Safari Websites → While Using. Then reload.":"Looking for GPS signal…")},
+    {enableHighAccuracy:true,maximumAge:5000,timeout:30000});
+  S.tick=setInterval(()=>{if(S.pos&&Date.now()-S.lastSent>=SEND_EVERY_MS)sendPos()},5000);
   keepAwake();
-  watchId=navigator.geolocation.watchPosition(onPos,onErr,{enableHighAccuracy:true,maximumAge:5000,timeout:30000});
-  tick=setInterval(()=>{render();if(last&&Date.now()-lastSentAt>=SEND_EVERY_MS)send()},1000);
+  try{await q(sb.from("trucks").update({status:"available"}).eq("truck_no",S.truck))}catch(e){}
 }
-function stop(){
-  if(watchId!==null)navigator.geolocation.clearWatch(watchId);
-  watchId=null;clearInterval(tick);
-  $("truck").disabled=false;$("go").textContent="Start sharing location";$("go").classList.remove("stop");
-  $("live").classList.remove("on");$("stateText").textContent="Not sharing";
-  if(wakeLock){wakeLock.release().catch(()=>{});wakeLock=null}
+async function goOffline(){
+  if(S.watch!==null&&S.watch!==undefined)navigator.geolocation.clearWatch(S.watch);
+  clearInterval(S.tick);S.watch=null;S.online=false;store.set("dakbox_online","0");paintSwitch();
+  if(S.wake){S.wake.release().catch(()=>{});S.wake=null}
+  if(S.truck)try{await q(sb.from("trucks").update({status:"off_duty"}).eq("truck_no",S.truck))}catch(e){}
 }
-function onPos(p){last=p;if(Date.now()-lastSentAt>=SEND_EVERY_MS)send();render()}
-function onErr(e){
-  $("err").textContent=e.code===1
-    ?"Location permission is off. iPhone: Settings → Privacy & Security → Location Services → Safari Websites → While Using. Then reload."
-    :"Can't get a GPS fix yet. Move near a window or outdoors.";
+function paintSwitch(){const b=$("online");b.classList.toggle("on",S.online);b.setAttribute("aria-pressed",S.online);b.querySelector("span").textContent=S.online?"Online":"Offline";renderJobs()}
+async function sendPos(){
+  if(S.sending||!S.pos)return;S.sending=true;const c=S.pos.coords;
+  try{await q(sb.from("gps_pings").insert({truck_no:S.truck,lat:+c.latitude.toFixed(6),lon:+c.longitude.toFixed(6),
+      speed_kmph:c.speed!=null&&c.speed>=0?Math.round(c.speed*3.6):null,recorded_at:new Date(S.pos.timestamp).toISOString(),source:"phone"}));S.lastSent=Date.now()}catch(e){}
+  S.sending=false;
 }
-async function send(){
-  if(sending||!last)return;sending=true;
-  const c=last.coords;
-  const row={truck_no:$("truck").value,lat:+c.latitude.toFixed(6),lon:+c.longitude.toFixed(6),
-    speed_kmph:c.speed!=null&&c.speed>=0?Math.round(c.speed*3.6):null,recorded_at:new Date(last.timestamp).toISOString(),source:"phone"};
-  const {error}=await sb.from("gps_pings").insert(row);
-  sending=false;
-  if(error){$("err").textContent="Couldn't send: "+error.message;$("stateText").textContent="Sending failed, retrying";return}
-  $("err").textContent="";lastSentAt=Date.now();sent++;$("stateText").textContent="Sharing as "+row.truck_no;render();
+async function keepAwake(){try{if("wakeLock" in navigator)S.wake=await navigator.wakeLock.request("screen")}catch(e){}}
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"){if(S.online)keepAwake();loadJobs()}});
+
+// ---------- jobs
+async function loadJobs(){
+  if(!S.truck)return;
+  try{S.jobs=await q(sb.from("orders").select("*").eq("truck_no",S.truck))}catch(e){return}
+  renderJobs();
 }
-function render(){
-  if(lastSentAt){const s=Math.round((Date.now()-lastSentAt)/1000);$("ago").textContent=s<60?s+" s":Math.floor(s/60)+" min"}
-  $("sent").textContent=sent;
-  if(last){const c=last.coords;$("acc").textContent="±"+Math.round(c.accuracy)+" m";
-    $("spd").textContent=c.speed!=null&&c.speed>=0?Math.round(c.speed*3.6)+" km/h":"—";
-    $("pos").textContent=c.latitude.toFixed(5)+", "+c.longitude.toFixed(5)}
+function km(a,b,c,d){const r=x=>x*Math.PI/180,h=Math.sin(r(c-a)/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2;return 12742*Math.asin(Math.sqrt(h))}
+function areaOf(o){
+  if(o.pickup_lat!=null&&S.pins.length){let best=null;S.pins.forEach(p=>{const d=km(o.pickup_lat,o.pickup_lon,p.lat,p.lon);if(!best||d<best.d)best={p,d}});
+    if(best.d<8)return best.p.area+", "+best.p.city}
+  const p=S.pins.find(p=>p.pincode===o.pickup_pincode);return p?p.area+", "+p.city:"Pincode "+o.pickup_pincode;
 }
-async function keepAwake(){try{if("wakeLock" in navigator)wakeLock=await navigator.wakeLock.request("screen")}catch(e){}}
-document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&watchId!==null)keepAwake()});
+function distText(o){
+  if(S.pos&&o.pickup_lat!=null){const d=km(S.pos.coords.latitude,S.pos.coords.longitude,o.pickup_lat,o.pickup_lon);return (d<1?Math.round(d*1000)+" m":d.toFixed(1)+" km")+" away"}
+  return o.pickup_distance_km!=null?o.pickup_distance_km+" km":"";
+}
+const mapLink=o=>o.pickup_lat!=null?`https://www.google.com/maps/dir/?api=1&destination=${o.pickup_lat},${o.pickup_lon}`:`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.pickup_address+" "+o.pickup_pincode)}`;
+function isToday(t){if(!t)return false;const d=new Date(t),n=new Date();return d.toDateString()===n.toDateString()}
+
+function renderJobs(){
+  const jobs=S.jobs||[];
+  const done=jobs.filter(o=>["picked_up","at_origin_hub","in_transit","at_destination_hub","out_for_delivery","delivered"].includes(o.status)&&isToday(o.accepted_at));
+  $("earned").textContent=inr(done.reduce((s,o)=>s+(+o.driver_pay||0),0));
+  $("doneCount").textContent=done.length+(done.length===1?" pickup":" pickups");
+  const active=jobs.filter(o=>["driver_accepted","picked_up"].includes(o.status)).sort((a,b)=>(a.accepted_at||"").localeCompare(b.accepted_at||""));
+  const offers=jobs.filter(o=>o.status==="pickup_assigned").sort((a,b)=>(a.assigned_at||"").localeCompare(b.assigned_at||""));
+  let h="";
+  active.forEach(o=>{
+    const picked=o.status==="picked_up";
+    h+=`<div class="card job"><h2>${picked?"Take to hub":"Go to pickup"}</h2>
+      <div class="area">${esc(areaOf(o))}</div>
+      <p class="addr">${esc(o.pickup_address)}</p>
+      <div class="facts"><span><b>${esc(o.sender_name)}</b></span><span>${o.charged_kg} kg</span><span>You earn <b>${inr(o.driver_pay)}</b></span></div>
+      ${picked?`<button class="btn" data-a="at_hub" data-awb="${o.awb}">Dropped at hub</button>`
+       :`<div class="pair"><a class="btn blue" href="${mapLink(o)}" target="_blank" rel="noopener">Navigate</a><a class="btn light" href="tel:${esc(o.sender_phone)}">Call</a></div>
+         <button class="btn" data-a="picked_up" data-awb="${o.awb}">Parcel picked up</button>
+         <button class="btn text" data-a="decline" data-awb="${o.awb}">Can't do this pickup</button>`}
+    </div>`});
+  offers.forEach(o=>{
+    h+=`<div class="card job offer"><h2>New pickup</h2>
+      <div class="pay">${inr(o.driver_pay)}</div>
+      <div class="area">${esc(areaOf(o))}</div>
+      <div class="facts"><span><b>${esc(distText(o))}</b></span><span>${o.charged_kg} kg parcel</span></div>
+      <button class="btn" data-a="accept" data-awb="${o.awb}">Accept</button>
+      <button class="btn text" data-a="decline" data-awb="${o.awb}">Decline</button></div>`});
+  if(!h)h=S.online
+    ?`<div class="card empty"><p><b>No pickups right now</b></p><p class="muted">Stay online. New pickups near you appear here.</p></div>`
+    :`<div class="card empty"><p><b>You're offline</b></p><p class="muted">Go online to start getting pickups.</p><button class="btn" type="button" onclick="goOnline()">Go online</button></div>`;
+  $("jobs").innerHTML=h;
+}
+$("jobs").addEventListener("click",async e=>{
+  const b=e.target.closest("[data-a]");if(!b||S.busy)return;
+  S.busy=true;b.disabled=true;
+  try{await q(sb.rpc("driver_action",{p_awb:b.dataset.awb,p_action:b.dataset.a}))}catch(err){}
+  S.busy=false;loadJobs();
+});
 boot();
 </script>
 </body>
