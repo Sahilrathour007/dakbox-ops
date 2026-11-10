@@ -140,6 +140,11 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
       <div><button class="btn" id="sim" type="button">Simulate one GPS ping per truck</button></div>
     </div>
     <div class="card">
+      <h2>Use a phone as a tracker</h2>
+      <p>Open the driver page on the driver's phone, sign in, pick the truck and tap Start. It sends the phone's location as that truck every 30 seconds while the page stays open.</p>
+      <p><a href="driver.html" target="_blank" rel="noopener">Open driver page</a> <span class="muted mono" id="driverUrl"></span></p>
+    </div>
+    <div class="card">
       <h2>Connect real trackers</h2>
       <p>Give your GPS vendor this address and key. They send each position as it arrives. Each truck needs its device ID (IMEI) filled in on the Trucks tab.</p>
       <pre id="ingestUrl"></pre>
@@ -200,6 +205,7 @@ async function loadPings(){const {data}=await sb.from("gps_pings").select("*").o
 async function start(session){
   if(S.started)return;S.started=true;
   $("app").hidden=false;$("whoEmail").textContent=session.user.email;
+  $("driverUrl").textContent=new URL("driver.html",location.href).href;
   $("ingestUrl").textContent=cfg.SUPABASE_URL.replace(/\/$/,"")+"/functions/v1/gps-ingest";
   $("oStatus").innerHTML='<option value="">All</option>'+Object.entries(STATUS).map(([k,v])=>`<option value="${k}">${v}</option>`).join("");
   await loadSettings();
