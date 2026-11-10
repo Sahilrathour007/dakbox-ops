@@ -187,13 +187,15 @@ function renderJobs(){
   let h="";
   const active=group(jobs.filter(o=>["driver_accepted","picked_up"].includes(o.status)));
   active.forEach(t=>{
-    const loaded=t.rows.every(o=>o.status==="picked_up"), goTo=loaded?t.to:t.from;
+    const loaded=t.rows.every(o=>o.status==="picked_up"), goTo=loaded?t.to:t.from, scanned=t.rows.filter(o=>o.status==="picked_up").length;
     h+=`<div class="card job"><h2>${loaded?"Drive to":"Go to"}</h2>
       <div class="area">${esc(name(goTo))}</div>
       <p class="addr">${esc(goTo?.address||"")}${goTo?.city?", "+esc(goTo.city):""}</p>
       <div class="facts"><span><b>${t.rows.length} parcel${t.rows.length>1?"s":""}</b></span><span>${sum(t.rows,"charged_kg")} kg</span>${away(goTo)!=null?`<span>${fmtKm(away(goTo))} away</span>`:""}<span>Trip pay <b>${inr(sum(t.rows,"driver_pay"))}</b></span></div>
       <a class="btn blue" href="${nav(goTo)}" target="_blank" rel="noopener">Navigate</a>
-      ${loaded?btn("at_hub",t,"Unloaded at "+esc(name(t.to))):btn("picked_up",t,"All parcels loaded")+btn("decline",t,"Can't do this trip","btn text")}
+      ${loaded?`<p class="muted">At ${esc(name(t.to))}, staff scan your parcels off the truck.</p>`
+        :scanned?`<p class="addr"><b>Loading: ${scanned} of ${t.rows.length} parcels scanned</b></p>`
+        :`<p class="muted">At the warehouse, staff scan each parcel onto your truck.</p>`+btn("decline",t,"Can't do this trip","btn text")}
     </div>`});
   group(jobs.filter(o=>o.status==="pickup_assigned")).forEach(t=>{
     const tk=tripKm(t);

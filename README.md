@@ -125,3 +125,22 @@ Run once each in the Supabase SQL Editor, if your database is older than the fea
 2. `supabase/fix_awb_generator.sql`
 3. `supabase/migration_002_driver_jobs.sql`
 4. `supabase/migration_003_warehouses.sql`
+5. `supabase/migration_004_scans.sql`
+
+## Warehouse page (loading and unloading by scan)
+`warehouse.html`, e.g. https://sahilrathour007.github.io/dakbox-ops/warehouse.html
+
+1. Manager signs in and picks their warehouse once.
+2. **Loading** shows trucks due to collect parcels here; **Unloading** shows trucks bringing parcels here. "Here" means the truck's GPS is within 500 m.
+3. Tap a truck, then scan each parcel's barcode with the phone camera (or type the AWB). Wrong truck, wrong warehouse, unknown or repeated parcels are rejected with a message.
+4. When every parcel is scanned, the trip moves on by itself: the driver's phone switches to "Drive to …" after loading, and parcels become "At destination hub" after unloading.
+5. If the truck was at the warehouse 45 min or more, the manager picks a reason (truck late, parcels not ready, no loading bay, not enough staff, paperwork, other).
+
+What is measured (ops site, **Loading times** tab), only from GPS and scans:
+- **Waiting** = truck arrived (GPS within 500 m) → first scan
+- **Loading** = first scan → last scan
+- **Total** = arrival → last scan; departure = GPS more than 1 km away after loading
+- If no GPS arrival was recorded, the first scan counts as arrival and the visit is marked "no GPS".
+
+Customers print a label with a Code 128 barcode of the AWB from the booking confirmation.
+Drivers can no longer mark parcels loaded or unloaded themselves: the scans do it.

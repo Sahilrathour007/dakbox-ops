@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Dakbox Warehouse</title>
+<style>
+/* Warehouse floor: high contrast, big targets, one truck at a time. */
+:root{--bg:#F4F5F7;--card:#FFFFFF;--ink:#111827;--muted:#5B6474;--line:#D9DDE3;--brand:#86198F;--ok:#15803D;--ok-soft:#DCFCE7;--bad:#B91C1C;--bad-soft:#FEE2E2;--warn:#A16207;--warn-soft:#FEF3C7}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.4 -apple-system,system-ui,"Segoe UI",sans-serif}
+main{max-width:520px;margin:0 auto;padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 40px max(16px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:14px}
+h1{font-size:22px;margin:0} h2{font-size:14px;margin:0;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+p{margin:0} .muted{color:var(--muted);font-size:15px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px}
+label{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--muted)}
+input,select{font:17px -apple-system,system-ui,sans-serif;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px;width:100%}
+.btn{font:700 17px -apple-system,system-ui,sans-serif;border:0;border-radius:12px;padding:15px;width:100%;cursor:pointer;color:#fff;background:var(--brand)}
+.btn.light{background:#E5E7EB;color:var(--ink)} .btn.text{background:none;color:var(--muted);font-weight:500;font-size:15px;padding:8px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.wh{font-weight:800;font-size:20px;color:var(--brand)}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:#E5E7EB;border-radius:12px;padding:4px}
+.seg button{border:0;background:none;padding:11px;border-radius:9px;font:600 16px -apple-system,system-ui,sans-serif;color:var(--muted);cursor:pointer}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.truck{display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;text-align:left;width:100%;font:inherit;color:inherit}
+.truck b{font-size:19px;letter-spacing:.02em}
+.pill{font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap}
+.pill.here{background:var(--ok-soft);color:var(--ok)} .pill.way{background:#E5E7EB;color:var(--muted)} .pill.late{background:var(--warn-soft);color:var(--warn)}
+.big{font-size:44px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+.timer{font-variant-numeric:tabular-nums;font-weight:700}
+#reader{width:100%;border-radius:12px;overflow:hidden;background:#000;min-height:120px}
+#reader video{border-radius:12px}
+.result{border-radius:12px;padding:14px;font-weight:700;font-size:18px;text-align:center}
+.result.ok{background:var(--ok-soft);color:var(--ok)} .result.bad{background:var(--bad-soft);color:var(--bad)}
+.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.list li{display:flex;justify-content:space-between;font-family:ui-monospace,Menlo,monospace;font-size:15px;padding:8px 10px;border-radius:8px;background:var(--bg)}
+.list li.done{background:var(--ok-soft);color:var(--ok)}
+.row{display:flex;gap:8px} .row input{flex:1}
+.row .btn{width:auto;padding:12px 18px}
+.note{border-radius:10px;padding:10px 12px;font-size:14px;background:var(--bad-soft);color:var(--bad)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <div id="setup" class="card" hidden><p>Not connected. Fill in config.js.</p></div>
+
+  <form id="login" class="card" hidden>
+    <h1>Dakbox Warehouse</h1>
+    <label>Email<input id="email" type="email" autocomplete="username" required></label>
+    <label>Password<input id="pw" type="password" autocomplete="current-password" required></label>
+    <button class="btn" type="submit">Sign in</button>
+    <p class="note" id="loginErr" hidden></p>
+  </form>
+
+  <div id="pick" class="card" hidden>
+    <h1>Which warehouse are you at?</h1>
+    <select id="whSel" aria-label="Warehouse"></select>
+    <button class="btn" id="pickGo" type="button">Continue</button>
+  </div>
+
+  <!-- Trucks due -->
+  <section id="home" hidden style="display:flex;flex-direction:column;gap:14px">
+    <div class="top"><span class="wh" id="whName"></span><button class="btn text" id="change" type="button" style="width:auto">Change</button></div>
+    <div class="seg"><button id="mLoad" class="on" type="button">Loading</button><button id="mUnload" type="button">Unloading</button></div>
+    <p class="note" id="net" hidden></p>
+    <div id="trucks"></div>
+    <button class="btn text" id="logout" type="button">Sign out</button>
+  </section>
+
+  <!-- Scanning one truck -->
+  <section id="scan" hidden style="display:flex;flex-direction:column;gap:14px">
+    <div class="top"><button class="btn text" id="back" type="button" style="width:auto;padding-left:0">← Trucks</button><span class="muted" id="scanMode"></span></div>
+    <div class="card">
+      <div class="top"><b id="sTruck" style="font-size:22px"></b><span class="timer" id="sTimer"></span></div>
+      <div><span class="big" id="sCount">0 / 0</span> <span class="muted" id="sWord">loaded</span></div>
+    </div>
+    <div id="reader"></div>
+    <p class="muted" id="camNote">Point the camera at the parcel's barcode.</p>
+    <form class="row" id="manual"><input id="awbIn" inputmode="numeric" placeholder="Or type the 12-digit AWB" aria-label="AWB number"><button class="btn" type="submit">Add</button></form>
+    <div id="sResult"></div>
+    <div class="card" id="doneCard" hidden></div>
+    <div class="card"><h2>Parcels for this truck</h2><ul class="list" id="sList"></ul></div>
+  </section>
+</main>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const cfg=window.DAKBOX||{};
+const sb=cfg.SUPABASE_URL&&cfg.SUPABASE_ANON_KEY?supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY):null;
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+const S={wh:null,whRow:null,mode:"load",truck:null,orders:[],trucks:[],visits:[],cam:null,lastCode:"",lastAt:0,busy:false};
+const DELAY_AFTER_MIN=45;
+const REASONS=[["truck_late","Truck came late"],["parcels_not_ready","Parcels were not ready"],["no_dock","No free loading bay"],["not_enough_staff","Not enough staff"],["paperwork","Paperwork"],["other","Other"]];
+
+function netErr(m){$("net").hidden=!m;$("net").textContent=m||""}
+async function q(p){try{const r=await p;if(r.error)throw r.error;netErr("");return r.data}catch(e){netErr(/fetch|network/i.test(e.message||"")?"No internet connection. Retrying…":(e.message||"Something went wrong"));throw e}}
+const mins=t=>Math.max(0,Math.round((Date.now()-Date.parse(t))/60000));
+const clock=ms=>{const s=Math.max(0,Math.floor(ms/1000));return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0")};
+function km(a,b,c,d){const r=x=>x*Math.PI/180,h=Math.sin(r(c-a)/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2;return 12742*Math.asin(Math.sqrt(h))}
+
+// ---------- sign in, pick warehouse
+async function boot(){if(!sb){$("setup").hidden=false;return}const {data:{session}}=await sb.auth.getSession();session?afterLogin():$("login").hidden=false}
+$("login").addEventListener("submit",async e=>{e.preventDefault();$("loginErr").hidden=true;
+  const {error}=await sb.auth.signInWithPassword({email:$("email").value.trim(),password:$("pw").value});
+  if(error){$("loginErr").hidden=false;$("loginErr").textContent=/fetch/i.test(error.message)?"No internet connection.":"Wrong email or password.";return}
+  $("login").hidden=true;afterLogin()});
+async function afterLogin(){const saved=store.get("dakbox_wh");if(saved){S.wh=saved;showHome()}else showPick()}
+async function showPick(){$("home").hidden=true;$("pick").hidden=false;
+  let list=[];try{list=await q(sb.from("warehouses").select("code,name,city").eq("active",true).order("city"))}catch(e){setTimeout(showPick,5000);return}
+  $("whSel").innerHTML=list.map(w=>`<option value="${esc(w.code)}">${esc(w.name)} · ${esc(w.city)}</option>`).join("")||'<option value="">No warehouses yet</option>'}
+$("pickGo").addEventListener("click",()=>{if(!$("whSel").value)return;S.wh=$("whSel").value;S.orders=[];S.visits=[];store.set("dakbox_wh",S.wh);showHome()});
+$("change").addEventListener("click",()=>{store.del("dakbox_wh");showPick()});
+$("logout").addEventListener("click",async()=>{store.del("dakbox_wh");await sb.auth.signOut();location.reload()});
+
+// ---------- trucks due here
+async function showHome(){$("pick").hidden=true;$("scan").hidden=true;$("home").hidden=false;
+  try{S.whRow=(await q(sb.from("warehouses").select("*").eq("code",S.wh)))[0]}catch(e){}
+  $("whName").textContent=S.whRow?S.whRow.name:S.wh;load();if(!S.poll)S.poll=setInterval(load,10000)}
+function setMode(m){S.mode=m;$("mLoad").classList.toggle("on",m==="load");$("mUnload").classList.toggle("on",m==="unload");renderTrucks()}
+$("mLoad").addEventListener("click",()=>setMode("load"));$("mUnload").addEventListener("click",()=>setMode("unload"));
+async function load(){
+  const forWh=S.wh;   // ignore answers that arrive after the manager switched warehouse
+  try{
+    const [out,inc,trucks,visits]=await Promise.all([
+      q(sb.from("orders").select("awb,truck_no,status,charged_kg,origin_wh,dest_wh").eq("origin_wh",S.wh)),
+      q(sb.from("orders").select("awb,truck_no,status,charged_kg,origin_wh,dest_wh").eq("dest_wh",S.wh)),
+      q(sb.from("trucks").select("truck_no,driver_name,driver_phone,last_lat,last_lon,last_ping_at")),
+      q(sb.from("warehouse_visits").select("*").eq("warehouse",S.wh).order("id",{ascending:false}).limit(50))]);
+    if(forWh!==S.wh)return;
+    const seen=new Set();S.orders=[...out,...inc].filter(o=>!seen.has(o.awb)&&seen.add(o.awb));S.trucks=trucks;S.visits=visits;
+  }catch(e){return}
+  if(!$("home").hidden)renderTrucks(); if(!$("scan").hidden)renderScan();
+}
+// Parcels for a truck in the current mode: still to scan, plus scanned in this visit
+function tripOrders(truck,mode){
+  return S.orders.filter(o=>o.truck_no===truck&&(mode==="load"
+    ?o.origin_wh===S.wh&&["pickup_assigned","driver_accepted","picked_up"].includes(o.status)
+    :o.dest_wh===S.wh&&["picked_up","at_destination_hub"].includes(o.status)));
+}
+const pending=(o,mode)=>mode==="load"?["pickup_assigned","driver_accepted"].includes(o.status):o.status==="picked_up";
+const openVisit=(truck,mode)=>S.visits.find(v=>v.truck_no===truck&&v.purpose===mode&&!v.departed_at);
+function renderTrucks(){
+  const byTruck=new Map();
+  S.orders.forEach(o=>{if(o.truck_no&&pending(o,S.mode)&&(S.mode==="load"?o.origin_wh===S.wh:o.dest_wh===S.wh)){
+    if(!byTruck.has(o.truck_no))byTruck.set(o.truck_no,[]);byTruck.get(o.truck_no).push(o)}});
+  const rows=[...byTruck.entries()].map(([t,list])=>{const tr=S.trucks.find(x=>x.truck_no===t)||{},v=openVisit(t,S.mode);
+    const dist=tr.last_lat!=null&&S.whRow?km(tr.last_lat,tr.last_lon,S.whRow.lat,S.whRow.lon):null;
+    const status=v&&v.arrived_at?`<span class="pill ${mins(v.arrived_at)>=DELAY_AFTER_MIN?"late":"here"}">Here ${mins(v.arrived_at)} min</span>`
+      :dist!=null&&dist<=0.5?'<span class="pill here">Here</span>':`<span class="pill way">${dist!=null?(dist<10?dist.toFixed(1):Math.round(dist))+" km away":"On the way"}</span>`;
+    return {here:!!(v&&v.arrived_at)||(dist!=null&&dist<=0.5),dist:dist??1e9,html:`<button class="card truck" type="button" data-t="${esc(t)}">
+      <span><b>${esc(t)}</b><br><span class="muted">${list.length} parcel${list.length>1?"s":""} · ${list.reduce((a,o)=>a+ +o.charged_kg,0)} kg${tr.driver_name?" · "+esc(tr.driver_name):""}</span></span>${status}</button>`}});
+  rows.sort((a,b)=>(b.here-a.here)||(a.dist-b.dist));
+  $("trucks").innerHTML=rows.map(r=>r.html).join("")||`<div class="card"><p><b>No trucks to ${S.mode==="load"?"load":"unload"} right now</b></p><p class="muted">Trucks with parcels for this warehouse appear here.</p></div>`;
+}
+$("trucks").addEventListener("click",e=>{const b=e.target.closest("[data-t]");if(b)openTruck(b.dataset.t)});
+
+// ---------- scanning
+function openTruck(t){S.truck=t;$("home").hidden=true;$("scan").hidden=false;$("sResult").innerHTML="";$("doneCard").hidden=true;
+  $("scanMode").textContent=S.mode==="load"?"Loading":"Unloading";$("sWord").textContent=S.mode==="load"?"loaded":"unloaded";
+  renderScan();startCam();if(!S.tick)S.tick=setInterval(renderTimer,1000)}
+$("back").addEventListener("click",()=>{stopCam();S.truck=null;showHome()});
+function renderScan(){
+  const list=tripOrders(S.truck,S.mode), done=list.filter(o=>!pending(o,S.mode));
+  $("sTruck").textContent=S.truck;$("sCount").textContent=done.length+" / "+list.length;
+  $("sList").innerHTML=list.map(o=>`<li class="${pending(o,S.mode)?"":"done"}"><span>${o.awb.replace(/(\d{4})(\d{4})(\d{4})/,"$1 $2 $3")}</span><span>${pending(o,S.mode)?o.charged_kg+" kg":"✓"}</span></li>`).join("");
+  renderTimer();
+  const v=openVisit(S.truck,S.mode);
+  if(list.length&&done.length===list.length&&v)showDone(v);
+}
+function renderTimer(){
+  if(!S.truck)return;const v=openVisit(S.truck,S.mode);
+  $("sTimer").textContent=!v?"":v.first_scan_at?(S.mode==="load"?"Loading ":"Unloading ")+clock((v.last_scan_at&&tripOrders(S.truck,S.mode).every(o=>!pending(o,S.mode))?Date.parse(v.last_scan_at):Date.now())-Date.parse(v.first_scan_at))
+    :v.arrived_at?"Waiting "+clock(Date.now()-Date.parse(v.arrived_at)):"";
+}
+function showDone(v){
+  if(!$("doneCard").hidden&&$("doneCard").dataset.v==v.id)return;
+  stopCam();const loading=Math.round((Date.parse(v.last_scan_at)-Date.parse(v.first_scan_at))/60000),total=v.arrived_at?Math.round((Date.parse(v.last_scan_at)-Date.parse(v.arrived_at))/60000):loading;
+  $("doneCard").dataset.v=v.id;$("doneCard").hidden=false;
+  $("doneCard").innerHTML=`<p class="result ok">All ${v.parcels_scanned} parcels ${S.mode==="load"?"loaded":"unloaded"} in ${loading} min</p>
+    <p class="muted">Truck was here ${total} min in total. ${S.mode==="load"?"The truck can leave.":""}</p>
+    ${total>=DELAY_AFTER_MIN&&!v.delay_reason?`<label>Why did it take ${total} min?<select id="why"><option value="">Choose a reason</option>${REASONS.map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select></label><button class="btn light" type="button" id="saveWhy">Save reason</button>`:""}
+    <button class="btn" type="button" id="doneBack">Back to trucks</button>`;
+  $("doneBack").onclick=()=>{S.truck=null;showHome()};
+  if($("saveWhy"))$("saveWhy").onclick=async()=>{if(!$("why").value)return;try{await q(sb.rpc("set_delay_reason",{p_visit:v.id,p_reason:$("why").value}));$("saveWhy").textContent="Saved";$("saveWhy").disabled=true}catch(e){}};
+}
+async function scan(code){
+  const awb=String(code).replace(/\D/g,"");
+  if(!awb||S.busy)return;
+  if(awb===S.lastCode&&Date.now()-S.lastAt<2500)return;     // same barcode still in front of the camera
+  S.lastCode=awb;S.lastAt=Date.now();S.busy=true;
+  let r;try{r=await q(sb.rpc("scan_parcel",{p_wh:S.wh,p_truck:S.truck,p_awb:awb,p_mode:S.mode}))}catch(e){S.busy=false;return}
+  S.busy=false;
+  const ok=r.result==="ok";
+  $("sResult").innerHTML=`<p class="result ${ok?"ok":"bad"}">${esc(ok?"✓ "+awb.replace(/(\d{4})(\d{4})(\d{4})/,"$1 $2 $3"):r.message)}</p>`;
+  beep(ok);if(navigator.vibrate)navigator.vibrate(ok?60:[80,60,80]);
+  await load();
+}
+$("manual").addEventListener("submit",e=>{e.preventDefault();const v=$("awbIn").value;$("awbIn").value="";S.lastCode="";scan(v)});
+
+// Camera barcode scanning (html5-qrcode reads Code 128 barcodes and QR codes)
+async function startCam(){
+  $("reader").hidden=false;
+  if(!window.Html5Qrcode){$("camNote").textContent="Camera scanner didn't load. Type the AWB instead.";return}
+  try{S.cam=new Html5Qrcode("reader");
+    await S.cam.start({facingMode:"environment"},{fps:10,qrbox:(w,h)=>({width:Math.min(300,w*0.85),height:Math.min(140,h*0.5)})},t=>scan(t),()=>{});
+    $("camNote").textContent="Point the camera at the parcel's barcode.";
+  }catch(e){$("camNote").textContent="Camera not available. Allow camera access in browser settings, or type the AWB.";S.cam=null;$("reader").hidden=true}
+}
+async function stopCam(){if(S.cam){try{await S.cam.stop();S.cam.clear()}catch(e){}S.cam=null}$("reader").hidden=true}
+let actx=null;function beep(ok){try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();const o=actx.createOscillator(),g=actx.createGain();
+  o.frequency.value=ok?880:220;o.connect(g);g.connect(actx.destination);g.gain.value=.15;o.start();o.stop(actx.currentTime+(ok?.12:.35))}catch(e){}}
+boot();
+</script>
+</body>
+</html>

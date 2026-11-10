@@ -81,7 +81,7 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
 <header class="top"><div class="in">
   <span class="brand">Dakbox<small>Operations</small></span>
   <nav class="tabs" id="tabs">
-    <button data-v="orders" class="on">Orders</button><button data-v="dispatch">Dispatch</button><button data-v="trucks">Trucks</button>
+    <button data-v="orders" class="on">Orders</button><button data-v="dispatch">Dispatch</button><button data-v="trucks">Trucks</button><button data-v="times">Loading times</button>
   </nav>
   <div class="who"><span id="whoEmail"></span><button class="btn ghost" id="logout" type="button">Sign out</button></div>
 </div></header>
@@ -142,6 +142,23 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
     </form>
   </section>
 
+  <!-- LOADING TIMES -->
+  <section id="v-times" hidden style="display:flex;flex-direction:column;gap:14px">
+    <div class="bar">
+      <label>Period<select id="tPeriod"><option value="1">Today</option><option value="7" selected>Last 7 days</option><option value="30">Last 30 days</option></select></label>
+      <span class="muted">Times come from GPS and parcel scans. Nobody can type them in.</span>
+    </div>
+    <div class="stats" id="tmStats"></div>
+    <h2>By warehouse</h2>
+    <div class="tw"><table style="min-width:640px">
+      <thead><tr><th>Warehouse</th><th>Truck visits</th><th>Avg waiting</th><th>Avg loading</th><th>Avg total</th><th>Over 45 min</th><th>Top delay reason</th></tr></thead>
+      <tbody id="tmWh"></tbody></table></div>
+    <h2>Recent truck visits</h2>
+    <div class="tw"><table>
+      <thead><tr><th>Arrived</th><th>Warehouse</th><th>Truck</th><th>Job</th><th>Parcels</th><th>Waiting</th><th>Loading</th><th>Total</th><th>Left</th><th>Delay reason</th></tr></thead>
+      <tbody id="tmBody"><tr><td colspan="10" class="muted">Loading…</td></tr></tbody></table></div>
+    <p class="muted">Warehouse staff scan parcels on <a id="whLink" href="warehouse.html" target="_blank" rel="noopener">the warehouse page</a>. Waiting = arrival to first scan. Loading = first to last scan. Total = arrival to last scan.</p>
+  </section>
 </main>
 </div>
 <div class="toast" id="toast" hidden></div>
@@ -203,7 +220,8 @@ async function start(session){
 // ---------- tabs
 $("tabs").addEventListener("click",e=>{const v=e.target.dataset.v;if(!v)return;S.view=v;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));
-  ["orders","dispatch","trucks"].forEach(x=>$("v-"+x).hidden=x!==v);
+  ["orders","dispatch","trucks","times"].forEach(x=>$("v-"+x).hidden=x!==v);
+  if(v==="times")loadTimes();
   if(v==="dispatch"){initMap();setTimeout(()=>map.invalidateSize(),50);loadSuggest()}
 });
 
@@ -333,6 +351,33 @@ $("addTruck").addEventListener("submit",async e=>{e.preventDefault();$("tErr").t
   $("addTruck").reset();$("tCap").value=1500;
   toast(placed?no+" added at pincode "+pc:no+" added. It shows on the map after its first GPS ping.");loadTrucks()});
 
+// ---------- loading times (from warehouse_visits via the visit_times view)
+const REASON={truck_late:"Truck came late",parcels_not_ready:"Parcels not ready",no_dock:"No free loading bay",not_enough_staff:"Not enough staff",paperwork:"Paperwork",other:"Other"};
+async function loadTimes(){
+  const since=new Date(Date.now()-(+$("tPeriod").value)*86400000);if($("tPeriod").value==="1")since.setHours(0,0,0,0);
+  const {data,error}=await sb.from("visit_times").select("*").gte("created_at",since.toISOString()).order("created_at",{ascending:false}).limit(500);
+  if(error){$("tmBody").innerHTML=`<tr><td colspan="10" class="muted">${/visit_times/.test(error.message)?"Loading times are not set up yet. In Supabase, SQL Editor, run supabase/migration_004_scans.sql.":esc(error.message)}</td></tr>`;$("tmStats").innerHTML="";$("tmWh").innerHTML="";return}
+  renderTimes(data||[]);
+}
+function renderTimes(rows){
+  const done=rows.filter(r=>r.last_scan_at);
+  const avg=(list,f)=>{const v=list.map(r=>r[f]).filter(x=>x!=null);return v.length?Math.round(v.reduce((a,b)=>a+ +b,0)/v.length):null};
+  const m=x=>x==null?"—":x+" min";
+  const slow=done.filter(r=>(r.total_min??0)>=45);
+  $("tmStats").innerHTML=`<div class="stat"><span class="muted">Truck visits</span><b>${rows.length}</b></div><div class="stat"><span class="muted">Avg waiting</span><b>${m(avg(done,"wait_min"))}</b></div><div class="stat"><span class="muted">Avg loading</span><b>${m(avg(done,"loading_min"))}</b></div><div class="stat"><span class="muted">Visits over 45 min</span><b>${slow.length}</b></div>`;
+  const by=new Map();done.forEach(r=>{if(!by.has(r.warehouse))by.set(r.warehouse,[]);by.get(r.warehouse).push(r)});
+  $("tmWh").innerHTML=[...by.entries()].sort((a,b)=>(avg(b[1],"total_min")??0)-(avg(a[1],"total_min")??0)).map(([code,list])=>{
+    const reasons={};list.forEach(r=>{if(r.delay_reason)reasons[r.delay_reason]=(reasons[r.delay_reason]||0)+1});
+    const top=Object.entries(reasons).sort((a,b)=>b[1]-a[1])[0];const over=list.filter(r=>(r.total_min??0)>=45).length;
+    return `<tr><td><span class="tag wh">${esc(code)}</span> ${esc(list[0].warehouse_name)}</td><td>${list.length}</td><td>${m(avg(list,"wait_min"))}</td><td>${m(avg(list,"loading_min"))}</td><td><b>${m(avg(list,"total_min"))}</b></td><td>${over?`<span class="tag bad">${over}</span>`:"0"}</td><td>${top?esc(REASON[top[0]])+" ("+top[1]+")":'<span class="muted">—</span>'}</td></tr>`}).join("")||'<tr><td colspan="7" class="muted">No finished truck visits in this period.</td></tr>';
+  $("tmBody").innerHTML=rows.map(r=>{const t=r.total_min??(r.arrived_at?Math.round((Date.now()-Date.parse(r.arrived_at))/60000):null);
+    return `<tr><td>${r.arrived_at?new Date(r.arrived_at).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}${r.arrival_source==="scan"?' <span class="tag warn" title="No GPS arrival: waiting time unknown">no GPS</span>':""}</td>
+    <td>${esc(r.warehouse_name)}</td><td class="mono">${esc(r.truck_no)}</td><td>${r.purpose==="load"?"Loading":"Unloading"}</td><td>${r.parcels_scanned} / ${r.parcels_expected}</td>
+    <td>${m(r.wait_min)}</td><td>${m(r.loading_min)}</td><td>${r.last_scan_at?`<b class="${(t??0)>=45?"":""}">${m(t)}</b>`:`<span class="tag warn">In progress · ${m(t)}</span>`}</td>
+    <td>${r.departed_at?new Date(r.departed_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):'<span class="muted">Still there</span>'}</td>
+    <td>${r.delay_reason?esc(REASON[r.delay_reason]):(t??0)>=45&&r.last_scan_at?'<span class="tag bad">Missing</span>':'<span class="muted">—</span>'}</td></tr>`}).join("")||'<tr><td colspan="10" class="muted">No truck visits in this period. They appear when a truck arrives at a warehouse or the first parcel is scanned.</td></tr>';
+}
+$("tPeriod").addEventListener("change",loadTimes);
 boot();
 </script>
 </body>
