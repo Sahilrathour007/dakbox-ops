@@ -401,9 +401,14 @@ create policy staff_all on public.settings     for all    to authenticated using
 revoke execute on function public.get_quote(text,text,numeric,numeric,numeric,numeric,text) from public;
 revoke execute on function public.book_order(jsonb) from public;
 revoke execute on function public.track_order(text) from public;
-revoke execute on function public.set_order_status(text,text,text) from public;
-revoke execute on function public.suggest_allocations(numeric,int) from public;
-revoke execute on function public.confirm_allocations(numeric,int) from public;
+-- Supabase also grants every new function to "anon" directly, so revoke from anon too.
+revoke execute on function public.set_order_status(text,text,text) from public, anon;
+revoke execute on function public.suggest_allocations(numeric,int) from public, anon;
+revoke execute on function public.confirm_allocations(numeric,int) from public, anon;
+revoke execute on function public.new_awb() from public, anon, authenticated;
+revoke execute on function public.block_edits() from public, anon, authenticated;
+revoke execute on function public.on_gps_ping() from public, anon, authenticated;
+alter default privileges in schema public revoke execute on functions from public, anon;
 
 grant execute on function public.get_quote(text,text,numeric,numeric,numeric,numeric,text) to anon, authenticated;
 grant execute on function public.book_order(jsonb)  to anon, authenticated;
