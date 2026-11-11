@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 data/toll_plazas_import.*
 data/toll_plazas_unmatched.csv
+data/nhai_raw_details.json
