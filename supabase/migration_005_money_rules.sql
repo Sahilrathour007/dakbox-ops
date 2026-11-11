@@ -36,7 +36,9 @@ drop policy if exists staff_all on public.trip_costs;
 create policy staff_all on public.trip_costs for all to authenticated using (true) with check (true);
 
 -- 3. Trip P&L. A trip = the parcels one truck took on one route in one dispatch.
-create or replace view public.trip_pnl with (security_invoker = true) as
+drop view if exists public.rule_flags;
+drop view if exists public.trip_pnl;
+create view public.trip_pnl with (security_invoker = true) as
 with s as (select * from public.settings where id = 1),
 t as (
   select o.truck_no, o.origin_wh, o.dest_wh, o.assigned_at,

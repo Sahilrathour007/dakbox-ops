@@ -57,6 +57,10 @@ td select{padding:4px 6px;font-size:13px}
 .neg{color:var(--err);font-weight:700} .pos{color:var(--ok);font-weight:700}
 .est{font-size:10px;font-weight:700;color:var(--warn);margin-left:3px}
 #flagCount:not(:empty){background:var(--err);color:#fff;border-radius:999px;padding:0 6px;font-size:11px;margin-left:4px}
+#smap{height:460px;border-radius:8px;border:1px solid var(--line)}
+#sLog{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:420px;overflow:auto;font-size:13px}
+#sLog li{padding:6px 8px;border-radius:6px;background:#F6F7F9}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
 .setgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
 .setgrid label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
 .legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted)}
@@ -86,7 +90,7 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
 <header class="top"><div class="in">
   <span class="brand">Dakbox<small>Operations</small></span>
   <nav class="tabs" id="tabs">
-    <button data-v="orders" class="on">Orders</button><button data-v="dispatch">Dispatch</button><button data-v="trucks">Trucks</button><button data-v="times">Loading times</button><button data-v="money">Money</button><button data-v="flags">Flags <span id="flagCount"></span></button>
+    <button data-v="orders" class="on">Orders</button><button data-v="dispatch">Dispatch</button><button data-v="trucks">Trucks</button><button data-v="times">Loading times</button><button data-v="money">Money</button><button data-v="flags">Flags <span id="flagCount"></span></button><button data-v="sim">Simulator</button>
   </nav>
   <div class="who"><span id="whoEmail"></span><button class="btn ghost" id="logout" type="button">Sign out</button></div>
 </div></header>
@@ -140,6 +144,7 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
       <label>Driver<input id="tDriver" required></label>
       <label>Driver mobile<input id="tPhone" maxlength="10"></label>
       <label>Capacity (kg)<input id="tCap" type="number" min="50" max="40000" value="1500" style="width:110px"></label>
+      <label>Toll class<select id="tClass"><option value="lcv">LCV</option><option value="bus_truck">2-axle truck</option><option value="upto_3_axle" selected>Up to 3-axle</option><option value="axle_4_6">4 to 6 axle</option><option value="axle_7_plus">7 or more axle</option></select></label>
       <label>GPS tracker ID (optional)<input id="tImei" placeholder="only if fitted"></label>
       <label>Now near pincode<input id="tPin" inputmode="numeric" maxlength="6" style="width:110px" placeholder="optional"></label>
       <button class="btn" type="submit">Add truck</button>
@@ -169,13 +174,13 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
   <section id="v-money" hidden style="display:flex;flex-direction:column;gap:14px">
     <div class="bar">
       <label>Period<select id="mPeriod"><option value="1">Today</option><option value="7" selected>Last 7 days</option><option value="30">Last 30 days</option><option value="3650">All</option></select></label>
-      <span class="muted">Revenue is the truck's share of the freight only. Values marked <span class="est">EST</span> are estimates until you enter real fuel and tolls.</span>
+      <span class="muted">Revenue is the truck's share of the freight only. Km come from GPS (whole round trip, including the empty return). Tolls are official NHAI fees of plazas passed. Diesel is IndianOil's price. Maintenance is assumed. Fixed cost is not counted.</span>
     </div>
     <div class="stats" id="mStats"></div>
     <div class="tw"><table>
-      <thead><tr><th>Trip</th><th>Route</th><th>Truck full</th><th>Revenue</th><th>Fuel</th><th>Tolls</th><th>Driver</th><th>Fixed cost</th><th>Profit</th><th>Per truck-hour</th><th>Breakeven load</th><th>Waiting cost</th><th></th></tr></thead>
+      <thead><tr><th>Trip</th><th>Route</th><th>Truck full</th><th>Distance</th><th>Revenue</th><th>Fuel</th><th>Tolls</th><th>Maintenance</th><th>Driver</th><th>Profit</th><th>Per truck-hour</th><th>Breakeven load</th><th></th></tr></thead>
       <tbody id="mBody"><tr><td colspan="13" class="muted">Loading…</td></tr></tbody></table></div>
-    <details class="card"><summary><b>Rates used</b> <span class="muted">(examples: replace with your real numbers)</span></summary>
+    <details class="card"><summary><b>Rates used</b> <span class="muted">(diesel from IndianOil; maintenance and driver pay are assumptions)</span></summary>
       <form id="rates" class="setgrid" style="margin-top:12px"></form>
       <div><button class="btn" id="saveRates" type="button">Save rates</button></div>
     </details>
@@ -188,6 +193,31 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
     <div class="tw"><table style="min-width:640px">
       <thead><tr><th>Rule</th><th>Problem</th><th>Detail</th><th>When</th></tr></thead>
       <tbody id="fBody"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody></table></div>
+  </section>
+
+  <!-- SIMULATOR -->
+  <section id="v-sim" hidden style="display:flex;flex-direction:column;gap:14px">
+    <div class="card">
+      <h2>Simulate a truck trip</h2>
+      <p class="muted" style="margin:0">A test truck drives the real road route to the origin warehouse, is loaded by scan, drives to the destination, is unloaded, and drives back empty. Tolls are charged at the official NHAI plazas it passes. The trip is replayed fast in simulated time and ends at the current time.</p>
+      <div class="bar">
+        <label>Route with waiting parcels<select id="sLane" style="min-width:320px"></select></label>
+        <label>Truck type (toll class)<select id="sClass"></select></label>
+        <label>Capacity (kg)<input id="sCap" type="number" min="100" max="40000" style="width:110px"></label>
+        <label>Replay speed<select id="sSpeed"><option value="1800">1 hour in 2 s</option><option value="3600" selected>1 hour in 1 s</option><option value="10800">3 hours in 1 s</option><option value="36000">10 hours in 1 s</option></select></label>
+        <button class="btn" id="sStart" type="button">Start simulation</button>
+        <button class="btn ghost" id="sStop" type="button" hidden>Stop</button>
+      </div>
+      <p class="banner" id="sNote" hidden></p>
+      <p class="muted" style="margin:0"><b id="sPhase"></b></p>
+    </div>
+    <div class="stats" id="sStats"></div>
+    <div id="smap"></div>
+    <div class="grid2">
+      <div class="card"><h2>Trip log</h2><ul id="sLog"></ul></div>
+      <div class="card"><h2>Trip result</h2><div id="sResult"><p class="muted">Appears when the truck is back at the origin warehouse.</p></div></div>
+    </div>
+    <p class="muted">Road routes: OpenStreetMap routing. Toll plazas and fees: NHAI. Diesel: IndianOil. Speed is worked out from the truck's positions.</p>
   </section>
 </main>
 </div>
@@ -251,10 +281,11 @@ async function start(session){
 // ---------- tabs
 $("tabs").addEventListener("click",e=>{const v=e.target.dataset.v;if(!v)return;S.view=v;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));
-  ["orders","dispatch","trucks","times","money","flags"].forEach(x=>$("v-"+x).hidden=x!==v);
+  ["orders","dispatch","trucks","times","money","flags","sim"].forEach(x=>$("v-"+x).hidden=x!==v);
   if(v==="times")loadTimes();
   if(v==="money")loadMoney();
   if(v==="flags")loadFlags();
+  if(v==="sim")loadSim();
   if(v==="dispatch"){initMap();setTimeout(()=>map.invalidateSize(),50);loadSuggest()}
 });
 
@@ -393,7 +424,7 @@ $("addTruck").addEventListener("submit",async e=>{e.preventDefault();$("tErr").t
   const no=$("tNo").value.toUpperCase().replace(/[\s-]/g,""),ph=$("tPhone").value.trim();
   if(!/^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{4}$/.test(no)){$("tErr").textContent="Enter a truck number like DL01AB1234.";return}
   if(ph&&!/^[6-9]\d{9}$/.test(ph)){$("tErr").textContent="Driver mobile must be 10 digits.";return}
-  const {error}=await sb.from("trucks").insert({truck_no:no,driver_name:$("tDriver").value.trim(),driver_phone:ph||null,capacity_kg:+$("tCap").value,gps_device_id:$("tImei").value.trim()||null});
+  const {error}=await sb.from("trucks").insert({truck_no:no,driver_name:$("tDriver").value.trim(),driver_phone:ph||null,capacity_kg:+$("tCap").value,toll_class:$("tClass").value,gps_device_id:$("tImei").value.trim()||null});
   if(error){$("tErr").textContent=error.code==="23505"?"That truck or device ID is already registered.":error.message;return}
   // Optional starting position from the pincodes table, saved as a manual ping.
   const pc=$("tPin").value.trim(); let placed=false;
@@ -429,39 +460,41 @@ function renderTimes(rows){
     <td>${r.delay_reason?esc(REASON[r.delay_reason]):(t??0)>=45&&r.last_scan_at?'<span class="tag bad">Missing</span>':'<span class="muted">—</span>'}</td></tr>`}).join("")||'<tr><td colspan="10" class="muted">No truck visits in this period. They appear when a truck arrives at a warehouse or the first parcel is scanned.</td></tr>';
 }
 $("tPeriod").addEventListener("change",loadTimes);
-// ---------- money: trip P&L
-const RATES=[["line_haul_share","Truck's share of freight (0 to 1)",0.01],["diesel_price","Diesel ₹ per litre",1],["km_per_l_loaded","Km per litre, loaded",0.1],["km_per_l_empty","Km per litre, empty",0.1],
-  ["toll_per_km","Tolls ₹ per km (estimate)",0.1],["fixed_per_day","Fixed cost ₹ per truck per day",50],["road_factor","Road km ÷ straight-line km",0.05],
+// ---------- money: trip P&L (GPS km, official tolls and diesel, assumed maintenance; no fixed cost)
+const RATES=[["line_haul_share","Truck's share of freight (0 to 1)",0.01],["diesel_price","Diesel ₹ per litre (IndianOil)",0.01],["km_per_l_loaded","Km per litre, loaded",0.1],["km_per_l_empty","Km per litre, empty",0.1],
+  ["maint_per_km","Maintenance and tyres ₹ per km (assumed)",0.1],["road_factor","Road km ÷ straight-line km (only when no GPS)",0.05],
   ["min_fill_pct","Send trip when truck is this % full",5],["max_wait_hours","…or oldest parcel waited (hours)",1],["trip_pay_base","Driver pay per trip ₹",10],["trip_pay_per_km","Driver pay ₹ per km",0.5]];
-function renderRates(){$("rates").innerHTML=RATES.map(([k,l,st])=>`<label>${l}<input type="number" step="${st}" id="r_${k}" value="${S.settings[k]??""}"></label>`).join("")}
+function renderRates(){$("rates").innerHTML=RATES.map(([k,l,st])=>`<label>${l}<input type="number" step="${st}" id="r_${k}" value="${S.settings[k]??""}"></label>`).join("")
+  +`<p class="muted" style="grid-column:1/-1;margin:0">Diesel source: ${esc(S.settings.diesel_source||"not set")}. Tolls are never typed in: they are the official NHAI fee of each plaza the truck's GPS passes.</p>`}
 $("saveRates").addEventListener("click",async()=>{const v={};RATES.forEach(([k])=>{const x=$("r_"+k).value;if(x!=="")v[k]=+x});
   const {error}=await sb.from("settings").update(v).eq("id",1);toast(error?error.message:"Rates saved");if(!error){await loadSettings();loadMoney()}});
 async function loadMoney(){
   renderRates();
   const since=new Date(Date.now()-(+$("mPeriod").value)*86400000);if($("mPeriod").value==="1")since.setHours(0,0,0,0);
   const {data,error}=await sb.from("trip_pnl").select("*").gte("assigned_at",since.toISOString()).order("assigned_at",{ascending:false}).limit(300);
-  if(error){$("mBody").innerHTML=`<tr><td colspan="13" class="muted">${/trip_pnl/.test(error.message)?"Money view is not set up yet. In Supabase, SQL Editor, run supabase/migration_005_money_rules.sql.":esc(error.message)}</td></tr>`;$("mStats").innerHTML="";return}
+  if(error){$("mBody").innerHTML=`<tr><td colspan="13" class="muted">${/trip_pnl|km_from_gps|column/.test(error.message)?"Money view needs the latest database update. In Supabase, SQL Editor, run supabase/migration_006_tolls_simulation.sql.":esc(error.message)}</td></tr>`;$("mStats").innerHTML="";return}
   const rows=data||[], sum=f=>rows.reduce((a,r)=>a+(+r[f]||0),0);
-  const hours=sum("cycle_hours"), contrib=sum("contribution");
+  const hours=sum("cycle_hours"), contrib=sum("revenue")-sum("cost");
   const money=n=>`<span class="${n<0?"neg":"pos"}">${n<0?"−":""}${inr(Math.abs(n))}</span>`;
-  $("mStats").innerHTML=`<div class="stat"><span class="muted">Trips</span><b>${rows.length}</b></div><div class="stat"><span class="muted">Revenue (truck share)</span><b>${inr(sum("revenue"))}</b></div><div class="stat"><span class="muted">Profit</span><b>${money(sum("profit"))}</b></div><div class="stat"><span class="muted">Avg truck full</span><b>${rows.length?(sum("fill_pct")/rows.length).toFixed(1):0}%</b></div><div class="stat"><span class="muted">Earning per truck-hour</span><b>${hours?money(Math.round(contrib/hours)):"—"}</b></div><div class="stat"><span class="muted">Cost of waiting at warehouses</span><b>${inr(sum("dwell_cost"))}</b></div>`;
-  const est=b=>b?"":'<span class="est">EST</span>';
+  $("mStats").innerHTML=`<div class="stat"><span class="muted">Trips</span><b>${rows.length}</b></div><div class="stat"><span class="muted">Revenue (truck share)</span><b>${inr(sum("revenue"))}</b></div><div class="stat"><span class="muted">Cost</span><b>${inr(sum("cost"))}</b></div><div class="stat"><span class="muted">Profit</span><b>${money(sum("profit"))}</b></div><div class="stat"><span class="muted">Avg truck full</span><b>${rows.length?(sum("fill_pct")/rows.length).toFixed(1):0}%</b></div><div class="stat"><span class="muted">Earning per truck-hour</span><b>${hours?money(Math.round(contrib/hours)):"—"}</b></div>`;
+  const tag=(t,cls="est")=>`<span class="${cls}">${t}</span>`;
   $("mBody").innerHTML=rows.map(r=>`<tr data-k="${esc(r.trip_key)}"><td>${new Date(r.assigned_at).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}<div class="muted mono">${esc(r.truck_no)}</div></td>
-    <td>${esc(r.from_name)} → ${esc(r.to_name||"?")}<div class="muted" style="font-size:12px">${r.parcels} parcels · ${r.kg} kg · ${r.loaded_km} km${r.completed?"":" · in progress"}</div></td>
-    <td>${r.fill_pct}%</td><td>${inr(r.revenue)}</td><td>${inr(r.fuel)}${est(r.fuel_is_actual)}</td><td>${inr(r.tolls)}${est(r.tolls_is_actual)}</td><td>${inr(r.driver_pay)}</td>
-    <td>${inr(r.fixed_cost)}<div class="muted" style="font-size:12px">${r.cycle_hours} h${r.cycle_actual?"":" est."}</div></td>
-    <td>${money(+r.profit)}</td><td>${money(+r.per_truck_hour)}</td>
+    <td>${esc(r.from_name)} → ${esc(r.to_name||"?")}<div class="muted" style="font-size:12px">${r.parcels} parcels · ${r.kg} kg · ${r.returned?"back at origin":r.completed?"returning":"in progress"}</div></td>
+    <td>${r.fill_pct}%</td>
+    <td>${(+r.km_total).toLocaleString("en-IN")} km${r.km_from_gps?"":tag("EST")}<div class="muted" style="font-size:12px">${(+r.km_loaded).toLocaleString("en-IN")} loaded · ${(+r.km_empty).toLocaleString("en-IN")} empty${r.avg_speed_kmh?" · "+r.avg_speed_kmh+" km/h":""}</div></td>
+    <td>${inr(r.revenue)}</td>
+    <td>${inr(r.fuel)}${r.fuel_is_actual?"":r.km_from_gps?"":tag("EST")}<div class="muted" style="font-size:12px">@ ₹${r.diesel_price}/L</div></td>
+    <td>${inr(r.tolls)} ${r.tolls_source==="nhai"?tag("NHAI","tag ok"):r.tolls_source==="entered"?tag("entered","tag"):tag("none","tag warn")}<div class="muted" style="font-size:12px">${r.toll_count} plazas${r.toll_rate_missing?" · a rate is missing":""}</div></td>
+    <td>${inr(r.maintenance)}${tag("ASSUMED")}</td><td>${inr(r.driver_pay)}</td>
+    <td>${money(+r.profit)}</td><td>${money(+r.per_truck_hour)}<div class="muted" style="font-size:12px">${r.cycle_hours} h</div></td>
     <td>${r.breakeven_kg!=null?(+r.breakeven_kg).toLocaleString("en-IN")+" kg":"—"}<div class="muted" style="font-size:12px">${r.breakeven_kg!=null?Math.round(r.breakeven_kg/r.capacity_kg*100)+"% of truck":""}</div></td>
-    <td>${inr(r.dwell_cost)}<div class="muted" style="font-size:12px">${r.dwell_min} min</div></td>
-    <td><button class="btn ghost" data-costs>Enter real costs</button></td></tr>`).join("")||'<tr><td colspan="13" class="muted">No trips in this period. Trips appear here when Dispatch sends them.</td></tr>';
+    <td><button class="btn ghost" data-costs>Enter fuel bill</button></td></tr>`).join("")||'<tr><td colspan="13" class="muted">No trips in this period. Trips appear here when Dispatch or the Simulator sends them.</td></tr>';
 }
 $("mPeriod").addEventListener("change",loadMoney);
 $("mBody").addEventListener("click",async e=>{if(!e.target.matches("[data-costs]"))return;const k=e.target.closest("tr").dataset.k;
-  const fuel=prompt("Actual fuel cost for this trip, in ₹ (from the fuel card or bills):");if(fuel===null)return;
-  const tolls=prompt("Actual tolls for this trip, in ₹ (from FASTag):");if(tolls===null)return;
-  const row={trip_key:k};if(fuel.trim()!=="")row.fuel_rs=+fuel;if(tolls.trim()!=="")row.tolls_rs=+tolls;
-  if((row.fuel_rs!=null&&!(row.fuel_rs>=0))||(row.tolls_rs!=null&&!(row.tolls_rs>=0))){toast("Enter amounts in ₹, numbers only");return}
-  const {error}=await sb.from("trip_costs").upsert(row);toast(error?error.message:"Real costs saved");loadMoney()});
+  const fuel=prompt("Actual fuel cost for this trip, in ₹ (from the fuel card or bills):");if(fuel===null||fuel.trim()==="")return;
+  if(!(+fuel>=0)){toast("Enter the amount in ₹, numbers only");return}
+  const {error}=await sb.from("trip_costs").upsert({trip_key:k,fuel_rs:+fuel});toast(error?error.message:"Fuel bill saved");loadMoney()});
 
 // ---------- flags
 const RULE_NAME={R2:"GPS",R3:"Scans",R5:"Waiting reason",R6:"Real fuel",R8:"Truck earns its share",R10:"Manual changes",R11:"Gaming check",R12:"Every order placed"};
@@ -474,6 +507,150 @@ async function loadFlags(){
   $("fBody").innerHTML=rows.map(r=>`<tr><td><span class="tag ${r.severity==="STOP"?"bad":"warn"}">${esc(r.rule)} ${r.severity}</span><div class="muted" style="font-size:12px">${esc(RULE_NAME[r.rule]||"")}</div></td><td><b>${esc(r.title)}</b></td><td>${esc(r.detail)}</td><td>${r.at?new Date(r.at).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}</td></tr>`).join("")
     ||'<tr><td colspan="4" class="muted">No flags. Every rule passes right now.</td></tr>';
 }
+// ---------- simulator: a test truck drives the real road route, is loaded and unloaded by scan, and drives back
+// Road routes: OpenStreetMap routing (router.project-osrm.org). Tolls: official NHAI plazas charged by the database
+// when the GPS path passes them. Speed shown is from consecutive positions. Simulated time ends at "now".
+const SIM={running:false,stop:false,map:null,layer:null,marker:null};
+const CLASS_INFO={lcv:["LCV (light commercial)",2500],bus_truck:["2-axle truck",9000],upto_3_axle:["Up to 3-axle truck (e.g. 32 ft)",15000],axle_4_6:["4 to 6 axle",25000],axle_7_plus:["7 or more axle",35000]};
+const SIM_MAX_KMH=60, SIM_STEP_KM=0.5, QUEUE_MIN=15, SCAN_MIN=1.5, LEAVE_MIN=5;
+function simLog(t,msg,cls=""){const li=document.createElement("li");li.className=cls;li.innerHTML=`<span class="mono muted">${t.toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</span> ${msg}`;$("sLog").prepend(li)}
+function simInitMap(){if(SIM.map)return;SIM.map=L.map("smap").setView([22.5,79],5);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(SIM.map);
+  SIM.layer=L.layerGroup().addTo(SIM.map)}
+async function loadSim(){
+  simInitMap();setTimeout(()=>SIM.map.invalidateSize(),50);
+  $("sClass").innerHTML=Object.entries(CLASS_INFO).map(([k,[l]])=>`<option value="${k}"${k==="upto_3_axle"?" selected":""}>${l}</option>`).join("");
+  $("sCap").value=CLASS_INFO[$("sClass").value][1];
+  const wh=new Map((S.wh||[]).map(w=>[w.code,w])), lanes=new Map();
+  S.orders.filter(o=>o.status==="booked"&&!o.truck_no&&o.origin_wh&&o.dest_wh&&o.origin_wh!==o.dest_wh).forEach(o=>{const k=o.origin_wh+"|"+o.dest_wh;
+    if(!lanes.has(k))lanes.set(k,{n:0,kg:0});const l=lanes.get(k);l.n++;l.kg+=+o.charged_kg});
+  $("sLane").innerHTML=[...lanes.entries()].map(([k,l])=>{const [a,b]=k.split("|");return `<option value="${k}">${esc(wh.get(a)?.name||a)} → ${esc(wh.get(b)?.name||b)} · ${l.n} parcels, ${Math.round(l.kg)} kg</option>`}).join("")
+    ||'<option value="">No route has parcels waiting. Book parcels on the customer site first.</option>';
+  $("sStart").disabled=!lanes.size||SIM.running;
+  const {count}=await sb.from("toll_plazas").select("id",{count:"exact",head:true}).then(r=>r,()=>({count:null}));
+  $("sNote").hidden=!!count;
+  $("sNote").textContent=count===null?"Simulator needs the latest database update: run supabase/migration_006_tolls_simulation.sql.":"No official NHAI toll plazas are imported yet, so this trip will show ₹0 tolls. Run tools/import_nhai_tolls.py (see README).";
+}
+$("sClass").addEventListener("change",()=>{$("sCap").value=CLASS_INFO[$("sClass").value][1]});
+
+async function osrmRoute(a,b){
+  const r=await fetch(`https://router.project-osrm.org/route/v1/driving/${a[1]},${a[0]};${b[1]},${b[0]}?overview=full&geometries=geojson&annotations=distance,duration`);
+  if(!r.ok)throw new Error("Road routing service did not answer ("+r.status+")");
+  const j=await r.json();if(j.code!=="Ok"||!j.routes?.length)throw new Error("No road route found");
+  return{coords:j.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]),dist:j.routes[0].legs[0].annotation.distance,dur:j.routes[0].legs[0].annotation.duration};
+}
+// Points every 0.5 km with times: OSRM's time per stretch, but never faster than SIM_MAX_KMH
+function timeline(route,t0){
+  const pts=[{lat:route.coords[0][0],lon:route.coords[0][1],t:t0,kmh:0}];let t=t0,acc=0,km=0;
+  for(let i=0;i<route.dist.length;i++){const dkm=route.dist[i]/1000,sec=Math.max(route.dur[i],dkm/SIM_MAX_KMH*3600);
+    t=new Date(t.getTime()+sec*1000);acc+=dkm;km+=dkm;
+    if(acc>=SIM_STEP_KM||i===route.dist.length-1){const c=route.coords[i+1];pts.push({lat:c[0],lon:c[1],t,kmh:Math.round(dkm/(sec/3600)||0)});acc=0}}
+  return{pts,end:t,km};
+}
+const addMin=(d,m)=>new Date(d.getTime()+m*60000);
+
+$("sStart").addEventListener("click",async()=>{
+  if(SIM.running)return;const [ow,dw]=$("sLane").value.split("|");if(!ow||!dw)return;
+  const wh=new Map((S.wh||[]).map(w=>[w.code,w])),O=wh.get(ow),Dw=wh.get(dw),cap=+$("sCap").value||15000,cls=$("sClass").value;
+  const waiting=S.orders.filter(o=>o.status==="booked"&&!o.truck_no&&o.origin_wh===ow&&o.dest_wh===dw).sort((a,b)=>a.created_at.localeCompare(b.created_at));
+  const pick=[];let kg=0;waiting.forEach(o=>{if(kg+ +o.charged_kg<=cap){pick.push(o);kg+= +o.charged_kg}});
+  if(!pick.length){toast("No parcel fits this truck");return}
+  SIM.running=true;SIM.stop=false;$("sStart").disabled=true;$("sStop").hidden=false;$("sLog").innerHTML="";$("sResult").innerHTML='<p class="muted">Appears when the truck is back at the origin warehouse.</p>';
+  try{
+    // the truck starts about 12 km from the origin warehouse
+    const ang=Math.random()*2*Math.PI,spawn=[O.lat+12/111.32*Math.cos(ang),O.lon+12/(111.32*Math.cos(O.lat*Math.PI/180))*Math.sin(ang)];
+    $("sPhase").textContent="Finding road routes…";
+    const [rA,rB,rC]=await Promise.all([osrmRoute(spawn,[O.lat,O.lon]),osrmRoute([O.lat,O.lon],[Dw.lat,Dw.lon]),osrmRoute([Dw.lat,Dw.lon],[O.lat,O.lon])]);
+    // plan the whole trip in simulated time so that it ends just before now
+    const n=pick.length,loadMin=QUEUE_MIN+n*SCAN_MIN+LEAVE_MIN;
+    const dur=r=>timeline(r,new Date(0)).end.getTime();
+    const total=dur(rA)+loadMin*60000+dur(rB)+loadMin*60000+dur(rC);
+    const t0=new Date(Date.now()-total-3*60000);
+    const A=timeline(rA,t0),loadAt=addMin(A.end,QUEUE_MIN),B=timeline(rB,addMin(A.end,loadMin)),unloadAt=addMin(B.end,QUEUE_MIN),C=timeline(rC,addMin(B.end,loadMin));
+    // draw the routes and the official toll plazas near them
+    SIM.layer.clearLayers();
+    L.polyline(rA.coords,{color:"#9AA3B2",weight:3,dashArray:"6 6"}).addTo(SIM.layer);L.polyline(rB.coords,{color:"#2563EB",weight:4}).addTo(SIM.layer);L.polyline(rC.coords,{color:"#9AA3B2",weight:3}).addTo(SIM.layer);
+    [O,Dw].forEach(w=>L.marker([w.lat,w.lon],{zIndexOffset:1000,icon:L.divIcon({className:"",iconSize:[0,0],iconAnchor:[13,13],html:`<div class="wh-pin"><b>W</b><span>${esc(w.name)}</span></div>`})}).addTo(SIM.layer));
+    SIM.map.fitBounds(rB.coords,{padding:[30,30]});
+    const lats=rB.coords.map(c=>c[0]),lons=rB.coords.map(c=>c[1]);
+    const {data:plz}=await sb.from("toll_plazas").select("id,name,lat,lon,rate_"+cls).gte("lat",Math.min(...lats)-0.05).lte("lat",Math.max(...lats)+0.05).gte("lon",Math.min(...lons)-0.05).lte("lon",Math.max(...lons)+0.05).limit(1000).then(r=>r,()=>({data:[]}));
+    SIM.plazaMarks=new Map();(plz||[]).forEach(p=>SIM.plazaMarks.set(p.id,L.circleMarker([p.lat,p.lon],{radius:4,color:"#A16207",weight:1,fillColor:"#FDE68A",fillOpacity:1}).bindTooltip(`${esc(p.name)} · NHAI fee ₹${p["rate_"+cls]??"?"}`).addTo(SIM.layer)));
+    // create the simulated truck and give it the parcels
+    const truck="SM01SIM"+String(Math.floor(Math.random()*9000)+1000);SIM.truck=truck;
+    let r=await sb.from("trucks").insert({truck_no:truck,driver_name:"Simulation",capacity_kg:cap,toll_class:cls,status:"available",is_simulated:true});if(r.error)throw r.error;
+    r=await sb.from("gps_pings").insert({truck_no:truck,lat:spawn[0],lon:spawn[1],speed_kmph:0,recorded_at:t0.toISOString(),source:"simulated"});if(r.error)throw r.error;
+    r=await sb.rpc("sim_assign",{p_truck:truck,p_awbs:pick.map(o=>o.awb),p_at:t0.toISOString(),p_to_wh_km:Math.round(A.km*10)/10});if(r.error)throw r.error;
+    simLog(t0,`<b>${truck}</b> (${CLASS_INFO[cls][0]}, ${cap.toLocaleString("en-IN")} kg) takes ${n} parcels (${kg} kg, ${(kg/cap*100).toFixed(1)}% full). Heading to ${esc(O.name)}.`);
+    SIM.marker=L.circleMarker(spawn,{radius:9,color:"#fff",weight:3,fillColor:"#16A34A",fillOpacity:1}).addTo(SIM.layer);
+    // the event list, in simulated time
+    const ev=[];A.pts.slice(1).forEach(p=>ev.push({t:p.t,ping:p,leg:"To origin warehouse (empty)"}));
+    pick.forEach((o,i)=>ev.push({t:addMin(loadAt,i*SCAN_MIN),scan:o.awb,wh:ow,mode:"load"}));
+    B.pts.slice(1).forEach(p=>ev.push({t:p.t,ping:p,leg:"Loaded, to "+Dw.name,loaded:true}));
+    pick.forEach((o,i)=>ev.push({t:addMin(unloadAt,i*SCAN_MIN),scan:o.awb,wh:dw,mode:"unload"}));
+    C.pts.slice(1).forEach(p=>ev.push({t:p.t,ping:p,leg:"Empty, back to "+O.name}));
+    ev.sort((a,b)=>a.t-b.t);
+    await runSim(ev,t0,{kmLoaded:0,kmEmpty:0,last:{lat:spawn[0],lon:spawn[1],t:t0},tollSeen:new Set(),tolls:0,cls});
+    if(!SIM.stop){await sb.from("trucks").update({status:"off_duty"}).eq("truck_no",truck);await simResult(truck)}
+  }catch(e){toast(e.message||String(e));$("sPhase").textContent="Stopped: "+(e.message||e)}
+  SIM.running=false;$("sStart").disabled=false;$("sStop").hidden=true;loadOrders();loadTrucks();
+});
+$("sStop").addEventListener("click",()=>{SIM.stop=true});
+
+async function runSim(ev,t0,st){
+  const factor=+$("sSpeed").value, real0=performance.now();let i=0;
+  const kmBetween2=(a,b)=>kmBetween(a.lat,a.lon,b.lat,b.lon);
+  while(i<ev.length&&!SIM.stop){
+    const clock=new Date(t0.getTime()+(performance.now()-real0)*factor);
+    const batch=[];
+    while(i<ev.length&&ev[i].t<=clock&&!ev[i].scan){batch.push(ev[i]);i++}
+    if(batch.length){
+      const rows=batch.map(e=>({truck_no:SIM.truck,lat:+e.ping.lat.toFixed(6),lon:+e.ping.lon.toFixed(6),speed_kmph:e.ping.kmh,recorded_at:e.ping.t.toISOString(),source:"simulated"}));
+      for(let k=0;k<rows.length;k+=100){const r=await sb.from("gps_pings").insert(rows.slice(k,k+100));if(r.error)throw r.error}
+      batch.forEach(e=>{const d=kmBetween2(st.last,e.ping);if(e.loaded)st.kmLoaded+=d;else st.kmEmpty+=d;
+        st.speed=Math.round(d/((e.ping.t-st.last.t)/3600000)||0);st.last={lat:e.ping.lat,lon:e.ping.lon,t:e.ping.t};st.leg=e.leg});
+      SIM.marker.setLatLng([st.last.lat,st.last.lon]);
+      // tolls the database charged for this stretch (official NHAI fee for the truck's class)
+      const {data:te}=await sb.from("toll_events").select("*").eq("truck_no",SIM.truck).order("at",{ascending:true});
+      (te||[]).forEach(e=>{if(st.tollSeen.has(e.id))return;st.tollSeen.add(e.id);st.tolls+= +e.amount;
+        simLog(new Date(e.at),`Toll: <b>${esc(e.plaza_name)}</b> ₹${e.amount}${e.rate_missing?' <span class="tag warn">no NHAI rate for this class</span>':""}`);
+        const m=SIM.plazaMarks?.get(e.plaza_id);if(m)m.setStyle({fillColor:"#DC2626",radius:6})});
+    }
+    if(i<ev.length&&ev[i].scan&&ev[i].t<=clock){
+      const e=ev[i];i++;
+      const r=await sb.rpc("sim_scan",{p_wh:e.wh,p_truck:SIM.truck,p_awb:e.scan,p_mode:e.mode,p_at:e.t.toISOString()});
+      if(r.error)throw r.error;
+      st.leg=(e.mode==="load"?"Loading at ":"Unloading at ")+e.wh;
+      if(r.data?.done)simLog(e.t,`${e.mode==="load"?"Loaded":"Unloaded"} all ${r.data.scanned} parcels at ${esc((S.wh||[]).find(w=>w.code===e.wh)?.name||e.wh)}`);
+    }
+    const s=+S.settings.diesel_price||95.2,fuelL=st.kmLoaded/(+S.settings.km_per_l_loaded||4)+st.kmEmpty/(+S.settings.km_per_l_empty||5);
+    $("sPhase").textContent=st.leg||"";
+    $("sStats").innerHTML=`<div class="stat"><span class="muted">Simulated time</span><b style="font-size:16px">${clock.toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</b></div>
+      <div class="stat"><span class="muted">Speed (from GPS positions)</span><b>${st.speed??0} km/h</b></div>
+      <div class="stat"><span class="muted">Km driven</span><b>${Math.round(st.kmLoaded+st.kmEmpty).toLocaleString("en-IN")}</b><span class="muted">${Math.round(st.kmLoaded)} loaded · ${Math.round(st.kmEmpty)} empty</span></div>
+      <div class="stat"><span class="muted">Diesel used</span><b>${Math.round(fuelL)} L</b><span class="muted">${inr(Math.round(fuelL*s))} at ₹${s}/L</span></div>
+      <div class="stat"><span class="muted">Tolls paid (NHAI)</span><b>${inr(st.tolls)}</b><span class="muted">${st.tollSeen.size} plazas</span></div>`;
+    await new Promise(res=>setTimeout(res,120));
+  }
+}
+async function simResult(truck){
+  const {data}=await sb.from("trip_pnl").select("*").eq("truck_no",truck).limit(1);const r=data?.[0];if(!r)return;
+  const money=n=>`<span class="${n<0?"neg":"pos"}">${n<0?"−":""}${inr(Math.abs(n))}</span>`;
+  $("sResult").innerHTML=`<table style="min-width:0"><tbody>
+    <tr><td>Route</td><td>${esc(r.from_name)} → ${esc(r.to_name)} and back</td></tr>
+    <tr><td>Load</td><td>${r.parcels} parcels · ${r.kg} kg · ${r.fill_pct}% full</td></tr>
+    <tr><td>Distance (GPS)</td><td>${(+r.km_total).toLocaleString("en-IN")} km · ${(+r.km_loaded).toLocaleString("en-IN")} loaded, ${(+r.km_empty).toLocaleString("en-IN")} empty</td></tr>
+    <tr><td>Average moving speed</td><td>${r.avg_speed_kmh??"—"} km/h · ${r.cycle_hours} h in total</td></tr>
+    <tr><td>Revenue (truck's share)</td><td>${inr(r.revenue)}</td></tr>
+    <tr><td>Fuel</td><td>${inr(r.fuel)} <span class="muted">at ₹${r.diesel_price}/L (IndianOil)</span></td></tr>
+    <tr><td>Tolls</td><td>${inr(r.tolls)} <span class="muted">${r.toll_count} NHAI plazas</span></td></tr>
+    <tr><td>Maintenance and tyres</td><td>${inr(r.maintenance)} <span class="est">ASSUMED</span></td></tr>
+    <tr><td>Driver</td><td>${inr(r.driver_pay)}</td></tr>
+    <tr><td><b>Profit</b></td><td><b>${money(+r.profit)}</b></td></tr>
+    <tr><td>Breakeven load</td><td>${r.breakeven_kg!=null?(+r.breakeven_kg).toLocaleString("en-IN")+" kg ("+Math.round(r.breakeven_kg/r.capacity_kg*100)+"% of truck)":"—"}</td></tr>
+  </tbody></table>`;
+  simLog(new Date(),`Trip finished. Profit ${money(+r.profit)}. Full details are on the Money tab.`);
+}
+
 boot();
 </script>
 </body>

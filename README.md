@@ -127,6 +127,7 @@ Run once each in the Supabase SQL Editor, if your database is older than the fea
 4. `supabase/migration_003_warehouses.sql`
 5. `supabase/migration_004_scans.sql`
 6. `supabase/migration_005_money_rules.sql`
+7. `supabase/migration_006_tolls_simulation.sql`
 
 ## Warehouse page (loading and unloading by scan)
 `warehouse.html`, e.g. https://sahilrathour007.github.io/dakbox-ops/warehouse.html
@@ -159,3 +160,30 @@ Drivers can no longer mark parcels loaded or unloaded themselves: the scans do i
 **Status changes** on the Orders tab ask for a reason, which is saved in the parcel's history.
 
 **Flags tab**: rules checked live: GPS lost on a trip (R2), impossible GPS jumps (R2), repeated rejected scans (R3), long waits with no reason (R5), finished trips still on estimated fuel or tolls (R6), trips losing money (R8), many manual changes by one person (R10), loading faster than 5 seconds per parcel (R11), orders with no warehouse (R12).
+
+## Official costs: tolls, diesel, maintenance
+| Cost | Source | How it is used |
+| --- | --- | --- |
+| Toll plazas | NHAI "National Highway (NH) Fee Plazas" list, 1,159 plazas (`data/nh_fee_plazas.csv`) | Which plazas exist |
+| Plaza location and fee per vehicle class | NHAI Toll Information System, tis.nhai.gov.in | When a truck's GPS path passes within 300 m of a plaza, the plaza's official single-journey fee for the truck's toll class is charged (`toll_events`). A plaza with no fee for that class is charged ₹0 and flagged, never guessed. |
+| Diesel | IndianOil price build-up of Diesel at Delhi, ₹95.20/L effective 01-Nov-2026 (iocl.com/petrol-diesel-price) | Fuel = loaded km ÷ km/l loaded + empty km ÷ km/l empty, × diesel price. Update the price on the Money tab when IndianOil revises it. |
+| Maintenance and tyres | Assumption, ₹2 per km | Editable on the Money tab. |
+| Fixed cost | Not counted | |
+
+Distance and speed come from the truck's GPS positions: total km for the whole round trip (including the empty return), loaded km between loading and unloading, and moving speed = km ÷ hours between positions.
+
+### Load the official toll plazas (once, and again after each April toll revision)
+NHAI's site blocks most servers outside India, so run the importer on your own computer (Python 3, nothing to install):
+```bash
+cd dakbox-ops
+python3 tools/import_nhai_tolls.py --upload your-staff-email@example.com
+```
+It downloads every plaza's location and fee table from NHAI, matches them to `data/nh_fee_plazas.csv`, and uploads them to Supabase (it asks for your Supabase password). Without `--upload` it writes `data/toll_plazas_import.sql`: paste that into the Supabase SQL Editor and Run. It also writes `data/toll_plazas_unmatched.csv` listing plazas from the NHAI list it could not match by name.
+
+## Simulator (ops site, Simulator tab)
+Pick a route with waiting parcels and a truck type. A simulated truck (number `SM01SIM....`) is created about 12 km from the origin warehouse and:
+1. drives the real road route (OpenStreetMap routing) to the origin warehouse; GPS records the arrival;
+2. waits 15 min, then each parcel is scanned on (1.5 min each);
+3. drives loaded to the destination warehouse, paying official NHAI tolls at each plaza it passes;
+4. is unloaded by scan, then drives back to the origin warehouse empty, paying tolls again.
+Truck speed follows the road (never above 60 km/h). The whole trip is replayed fast in simulated time that ends at the current moment, so every time stamp is in the past. The result (km, speed, diesel, tolls, maintenance, driver, profit) appears at the end and on the Money tab. Simulated trucks are marked `is_simulated` and set to off duty afterwards.
