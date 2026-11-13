@@ -129,6 +129,7 @@ Run once each in the Supabase SQL Editor, if your database is older than the fea
 6. `supabase/migration_005_money_rules.sql`
 7. `supabase/migration_006_tolls_simulation.sql`
 8. `supabase/migration_007_hub_spoke.sql` (hub-and-spoke network; safe to run again)
+9. `supabase/migration_008_pincode_regions.sql` (every pincode finds its nearest warehouse; safe to run again)
 
 ## Warehouse page (loading and unloading by scan)
 `warehouse.html`, e.g. https://sahilrathour007.github.io/dakbox-ops/warehouse.html
