@@ -132,6 +132,7 @@ Run once each in the Supabase SQL Editor, if your database is older than the fea
 9. `supabase/migration_008_pincode_regions.sql` (every pincode finds its nearest warehouse; safe to run again)
 10. `supabase/migration_009_expressway_estimate.sql` (closed-loop expressway tolls, cost estimate before a trip; safe to run again)
 11. `supabase/migration_010_dispatch_real_trucks.sql` (dispatch reasons never name simulated trucks; safe to run again)
+12. `supabase/migration_011_return_loads.sql` (return loads; safe to run again)
 
 ## Warehouse page (loading and unloading by scan)
 `warehouse.html`, e.g. https://sahilrathour007.github.io/dakbox-ops/warehouse.html
@@ -216,3 +217,10 @@ On closed-loop expressways (Delhi-Mumbai Expressway NE-4, Delhi-Meerut Expresswa
 
 ## Trucks tab and Dispatch show real trucks only
 Simulated trucks (`is_simulated`) are hidden there; they stay visible in the Simulator and on the Money tab. Dispatch → Zoom to → "Trucks with live GPS" jumps to trucks that sent GPS recently, and the map moves to a truck when it comes online.
+
+## Return loads (backhaul)
+A truck that has delivered drives home anyway. Parcels waiting at that warehouse whose next leg goes to the truck's home warehouse can ride along.
+- **Automatic:** when the last parcel is scanned off a truck, the system offers the waiting parcels for its drive home (oldest first, as many as fit) to the driver.
+- **Driver page:** the offer appears as a green **Return load** card (the phone vibrates); the driver accepts or declines. Loading and unloading are scanned as usual.
+- **Ops → Return loads tab:** every real truck from dispatch until it is back home, its return trip, the parcels waiting on that lane, what fits, revenue, **extra cost** (diesel loaded instead of empty + driver trip pay), **own truck** cost (the same parcels on a separate truck, there and back, tolls not included), and the status. "Offer to driver" offers them by hand (e.g. after a decline).
+- **Money:** a trip now ends when the truck starts its next job, so the drive home is counted once: on the return load if there is one, otherwise on the trip itself as before. Trips without a return load cost exactly what they did.

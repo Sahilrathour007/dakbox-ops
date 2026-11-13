@@ -30,6 +30,8 @@ input,select{font:17px -apple-system,system-ui,sans-serif;color:var(--ink);backg
 .card.earn{flex-direction:row;justify-content:space-between;align-items:center;padding:12px 18px}
 .earn b{font-size:28px;color:var(--gold);font-variant-numeric:tabular-nums}
 .job.offer{border-color:var(--gold);box-shadow:0 0 0 2px rgba(251,191,36,.25)}
+.job.back{border-color:#16A34A;box-shadow:0 0 0 3px rgba(22,163,74,.3)}
+.backnote{margin:0 0 8px;padding:8px 10px;border-radius:8px;background:#DCFCE7;color:#14532D;font-weight:600}
 .area{font-size:26px;font-weight:800;line-height:1.15}
 .pay{font-size:40px;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums}
 .facts{display:flex;gap:18px;flex-wrap:wrap;font-size:15px;color:var(--muted)} .facts b{color:var(--ink)}
@@ -163,8 +165,13 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState===
 async function loadJobs(){
   if(!S.truck)return;
   const today=new Date();today.setHours(0,0,0,0);
-  try{[S.jobs,S.legsDone]=await Promise.all([q(sb.from("orders").select("*").eq("truck_no",S.truck)),
-    q(sb.from("parcel_legs").select("awb,from_wh,to_wh,driver_pay,unloaded_at").eq("truck_no",S.truck).gte("unloaded_at",today.toISOString()))])}catch(e){return}
+  try{[S.jobs,S.legsDone,S.backLegs]=await Promise.all([q(sb.from("orders").select("*").eq("truck_no",S.truck)),
+    q(sb.from("parcel_legs").select("awb,from_wh,to_wh,driver_pay,unloaded_at").eq("truck_no",S.truck).gte("unloaded_at",today.toISOString())),
+    q(sb.from("parcel_legs").select("awb").eq("truck_no",S.truck).eq("backhaul",true).is("unloaded_at",null))])}catch(e){return}
+  // a new return load: buzz and show the alert once
+  S.backhaul=new Set((S.backLegs||[]).map(l=>l.awb));
+  const newOffers=(S.jobs||[]).filter(o=>o.status==="pickup_assigned"&&S.backhaul.has(o.awb)&&!(S.alerted||new Set()).has(o.awb));
+  if(newOffers.length){S.alerted=new Set([...(S.alerted||[]),...newOffers.map(o=>o.awb)]);try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(e){}}
   renderJobs();
 }
 function km(a,b,c,d){const r=x=>x*Math.PI/180,h=Math.sin(r(c-a)/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2;return 12742*Math.asin(Math.sqrt(h))}
@@ -200,12 +207,12 @@ function renderJobs(){
         :`<p class="muted">At the warehouse, staff scan each parcel onto your truck.</p>`+btn("decline",t,"Can't do this trip","btn text")}
     </div>`});
   group(jobs.filter(o=>o.status==="pickup_assigned")).forEach(t=>{
-    const tk=tripKm(t);
-    h+=`<div class="card job offer"><h2>New trip</h2>
+    const tk=tripKm(t),back=t.rows.some(o=>(S.backhaul||new Set()).has(o.awb));
+    h+=`<div class="card job offer${back?" back":""}">${back?`<p class="backnote">Return load: parcels going your way home. Your truck drives back anyway, so this is extra pay.</p>`:""}<h2>${back?"Return load":"New trip"}</h2>
       <div class="pay">${inr(sum(t.rows,"driver_pay"))}</div>
       <div class="area">${esc(name(t.from))} → ${esc(name(t.to))}</div>
       <div class="facts">${away(t.from)!=null?`<span><b>${fmtKm(away(t.from))}</b> to pickup</span>`:""}${tk!=null?`<span><b>${fmtKm(tk)}</b> trip</span>`:""}<span>${t.rows.length} parcel${t.rows.length>1?"s":""}, ${sum(t.rows,"charged_kg")} kg</span></div>
-      ${btn("accept",t,"Accept trip")}${btn("decline",t,"Decline","btn text")}</div>`});
+      ${btn("accept",t,back?"Accept return load":"Accept trip")}${btn("decline",t,"Decline","btn text")}</div>`});
   if(!h)h=S.online
     ?`<div class="card empty"><p><b>No trips right now</b></p><p class="muted">Stay online. New trips from warehouses near you appear here.</p></div>`
     :`<div class="card empty"><p><b>You're offline</b></p><p class="muted">Go online to start getting trips.</p><button class="btn" type="button" onclick="goOnline()">Go online</button></div>`;
