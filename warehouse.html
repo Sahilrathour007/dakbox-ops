@@ -127,27 +127,31 @@ $("mLoad").addEventListener("click",()=>setMode("load"));$("mUnload").addEventLi
 async function load(){
   const forWh=S.wh;   // ignore answers that arrive after the manager switched warehouse
   try{
+    // Hub and spoke: each truck leg is a parcel_legs row. Loading here = legs starting here, unloading = legs ending here.
+    const since=new Date(Date.now()-4*24*3600000).toISOString();
     const [out,inc,trucks,visits]=await Promise.all([
-      q(sb.from("orders").select("awb,truck_no,status,charged_kg,origin_wh,dest_wh").eq("origin_wh",S.wh)),
-      q(sb.from("orders").select("awb,truck_no,status,charged_kg,origin_wh,dest_wh").eq("dest_wh",S.wh)),
+      q(sb.from("parcel_legs").select("awb,truck_no,leg_no,from_wh,to_wh,loaded_at,unloaded_at").eq("from_wh",S.wh).gte("assigned_at",since)),
+      q(sb.from("parcel_legs").select("awb,truck_no,leg_no,from_wh,to_wh,loaded_at,unloaded_at").eq("to_wh",S.wh).gte("assigned_at",since)),
       q(sb.from("trucks").select("truck_no,driver_name,driver_phone,last_lat,last_lon,last_ping_at")),
       q(sb.from("warehouse_visits").select("*").eq("warehouse",S.wh).order("id",{ascending:false}).limit(50))]);
     if(forWh!==S.wh)return;
-    const seen=new Set();S.orders=[...out,...inc].filter(o=>!seen.has(o.awb)&&seen.add(o.awb));S.trucks=trucks;S.visits=visits;
+    const awbs=[...new Set([...out,...inc].map(l=>l.awb))];
+    const kg=new Map((awbs.length?await q(sb.from("orders").select("awb,charged_kg").in("awb",awbs)):[]).map(o=>[o.awb,o.charged_kg]));
+    if(forWh!==S.wh)return;
+    S.orders=[...out.map(l=>({...l,dir:"load"})),...inc.map(l=>({...l,dir:"unload"}))].map(l=>({...l,charged_kg:kg.get(l.awb)??0}));
+    S.trucks=trucks;S.visits=visits;
   }catch(e){return}
   if(!$("home").hidden)renderTrucks(); if(!$("scan").hidden)renderScan();
 }
 // Parcels for a truck in the current mode: still to scan, plus scanned in this visit
 function tripOrders(truck,mode){
-  return S.orders.filter(o=>o.truck_no===truck&&(mode==="load"
-    ?o.origin_wh===S.wh&&["pickup_assigned","driver_accepted","picked_up"].includes(o.status)
-    :o.dest_wh===S.wh&&["picked_up","at_destination_hub"].includes(o.status)));
+  return S.orders.filter(o=>o.truck_no===truck&&o.dir===mode&&(mode==="load"?!o.unloaded_at:!!o.loaded_at));
 }
-const pending=(o,mode)=>mode==="load"?["pickup_assigned","driver_accepted"].includes(o.status):o.status==="picked_up";
+const pending=(o,mode)=>mode==="load"?!o.loaded_at:!o.unloaded_at;
 const openVisit=(truck,mode)=>S.visits.find(v=>v.truck_no===truck&&v.purpose===mode&&!v.departed_at);
 function renderTrucks(){
   const byTruck=new Map();
-  S.orders.forEach(o=>{if(o.truck_no&&pending(o,S.mode)&&(S.mode==="load"?o.origin_wh===S.wh:o.dest_wh===S.wh)){
+  S.orders.forEach(o=>{if(o.truck_no&&o.dir===S.mode&&pending(o,S.mode)&&(S.mode==="load"||o.loaded_at)){
     if(!byTruck.has(o.truck_no))byTruck.set(o.truck_no,[]);byTruck.get(o.truck_no).push(o)}});
   const rows=[...byTruck.entries()].map(([t,list])=>{const tr=S.trucks.find(x=>x.truck_no===t)||{},v=openVisit(t,S.mode);
     const dist=tr.last_lat!=null&&S.whRow?km(tr.last_lat,tr.last_lon,S.whRow.lat,S.whRow.lon):null;

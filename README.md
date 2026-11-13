@@ -128,6 +128,7 @@ Run once each in the Supabase SQL Editor, if your database is older than the fea
 5. `supabase/migration_004_scans.sql`
 6. `supabase/migration_005_money_rules.sql`
 7. `supabase/migration_006_tolls_simulation.sql`
+8. `supabase/migration_007_hub_spoke.sql` (hub-and-spoke network; safe to run again)
 
 ## Warehouse page (loading and unloading by scan)
 `warehouse.html`, e.g. https://sahilrathour007.github.io/dakbox-ops/warehouse.html
@@ -180,10 +181,21 @@ python3 tools/import_nhai_tolls.py --upload your-staff-email@example.com
 ```
 It downloads every plaza's location and fee table from NHAI, matches them to `data/nh_fee_plazas.csv`, and uploads them to Supabase (it asks for your Supabase password). Without `--upload` it writes `data/toll_plazas_import.sql`: paste that into the Supabase SQL Editor and Run. It also writes `data/toll_plazas_unmatched.csv` listing plazas from the NHAI list it could not match by name.
 
+## Hub and spoke (no truck leg longer than 500 road km)
+A driver may work 8 hours a day and must rest after 5 hours (Motor Transport Workers Act 1961, s.13 and s.15; Motor Vehicles Act 1988, s.91). At highway speeds that is about 400 to 500 km, so parcels travel hub to hub:
+- Each warehouse is a **hub** (`is_hub = true`) or a **spoke**. A spoke connects only to its nearest hub. Okhla, Noida, Navi Mumbai and Kanpur are spokes.
+- 16 **relay hubs** were added on the national highway corridors (Udaipur, Surat, Indore, Nagpur, Agra, Varanasi, Gaya, Dhanbad, Vijayawada, Nellore, Solapur, Kurnool, Hubballi, Chitradurga, Raipur, Bhubaneswar). Their positions are approximate: check them and correct them in Table Editor, warehouses.
+- When a parcel is booked, `plan_route` picks the shortest chain of warehouses where every hub-to-hub leg is at most `settings.max_leg_km` (500) road km (straight km × `road_factor`). Example: Okhla → Gurugram → Jaipur → Udaipur → Ahmedabad → Surat → Bhiwandi → Navi Mumbai.
+- Dispatch, scanning and the driver page work **one leg at a time** (`orders.cur_wh` → `orders.next_wh`). When a parcel is unloaded at a middle hub, it becomes "In transit" there and waits for the truck of its next leg.
+- Every leg is recorded in `parcel_legs`. The Money tab shows each leg as its own trip. Revenue is split across the legs by distance; each leg is costed with exactly the same formulas as before (GPS km including the empty return, NHAI tolls, IndianOil diesel, assumed maintenance, driver pay).
+- New flags: **R12** order without a route, **R13** leg longer than the limit (from GPS km).
+- After the update, parcels already on a truck finish their old direct trip as one leg. Waiting parcels get a route.
+
 ## Simulator (ops site, Simulator tab)
-Pick a route with waiting parcels and a truck type. A simulated truck (number `SM01SIM....`) is created about 12 km from the origin warehouse and:
-1. drives the real road route (OpenStreetMap routing) to the origin warehouse; GPS records the arrival;
-2. waits 15 min, then each parcel is scanned on (1.5 min each);
-3. drives loaded to the destination warehouse, paying official NHAI tolls at each plaza it passes;
-4. is unloaded by scan, then drives back to the origin warehouse empty, paying tolls again.
-Truck speed follows the road (never above 60 km/h). The whole trip is replayed fast in simulated time that ends at the current moment, so every time stamp is in the past. The result (km, speed, diesel, tolls, maintenance, driver, profit) appears at the end and on the Money tab. Simulated trucks are marked `is_simulated` and set to off duty afterwards.
+Pick a route with waiting parcels and a truck type. The simulator runs the whole hub-and-spoke relay, with one simulated truck per leg (numbers `SM01SI.....`), each based at its leg's start hub:
+1. the truck is loaded by scan at its hub (15 min queue, 1.5 min per parcel);
+2. it drives the real road route (OpenStreetMap routing) to the next hub, paying official NHAI tolls at each plaza it passes;
+3. it is unloaded by scan there, then drives back to its base empty;
+4. the parcels are sorted at the hub (`settings.hub_sort_minutes`, 30) and the next leg's truck takes them.
+Truck speed follows the road (never above 60 km/h). The toll rule is unchanged: passing the same plaza again within 6 hours counts as the return trip and is not charged again.
+**The whole relay always replays in 5 minutes**, however long it is, and simulated time ends at the current moment. Costs are worked out only from the simulated positions and scans, never from the replay speed, so a faster or slower replay gives exactly the same costs. The result per leg and in total appears at the end and on the Money tab. Simulated trucks are marked `is_simulated`, never get real parcels from dispatch, and are set to off duty afterwards.

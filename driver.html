@@ -162,7 +162,9 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState===
 // ---------- jobs
 async function loadJobs(){
   if(!S.truck)return;
-  try{S.jobs=await q(sb.from("orders").select("*").eq("truck_no",S.truck))}catch(e){return}
+  const today=new Date();today.setHours(0,0,0,0);
+  try{[S.jobs,S.legsDone]=await Promise.all([q(sb.from("orders").select("*").eq("truck_no",S.truck)),
+    q(sb.from("parcel_legs").select("awb,from_wh,to_wh,driver_pay,unloaded_at").eq("truck_no",S.truck).gte("unloaded_at",today.toISOString()))])}catch(e){return}
   renderJobs();
 }
 function km(a,b,c,d){const r=x=>x*Math.PI/180,h=Math.sin(r(c-a)/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2;return 12742*Math.asin(Math.sqrt(h))}
@@ -170,10 +172,10 @@ function isToday(t){if(!t)return false;const d=new Date(t),n=new Date();return d
 
 function renderJobs(){
   const jobs=S.jobs||[], wh=new Map((S.wh||[]).map(w=>[w.code,w]));
-  // Group parcels into trips: same origin and destination warehouse
-  const group=list=>{const m=new Map();list.forEach(o=>{const k=o.origin_wh+"|"+(o.dest_wh||"");if(!m.has(k))m.set(k,{from:wh.get(o.origin_wh),to:wh.get(o.dest_wh),o:o.origin_wh,d:o.dest_wh,rows:[]});m.get(k).rows.push(o)});return[...m.values()]};
-  const doneStatuses=["at_destination_hub","out_for_delivery","delivered"];
-  const doneToday=jobs.filter(o=>doneStatuses.includes(o.status)&&isToday(o.accepted_at));
+  // Group parcels into trips: the same leg (hub to hub), from where the parcel is now to its next warehouse
+  const group=list=>{const m=new Map();list.forEach(o=>{const f=o.cur_wh??o.from_wh,d=o.next_wh??o.to_wh,k=f+"|"+(d||"");if(!m.has(k))m.set(k,{from:wh.get(f),to:wh.get(d),o:f,d,rows:[]});m.get(k).rows.push(o)});return[...m.values()]};
+  // Earned today: legs unloaded today (a parcel moves on to the next truck at a hub, so legs are the record)
+  const doneToday=S.legsDone||[];
   $("earned").textContent=inr(doneToday.reduce((s,o)=>s+(+o.driver_pay||0),0));
   const tripsDone=group(doneToday).length;
   $("doneCount").textContent=tripsDone+(tripsDone===1?" trip":" trips");
