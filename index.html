@@ -52,6 +52,9 @@ td select{padding:4px 6px;font-size:13px}
 .wh-pin b{display:grid;place-items:center;width:26px;height:26px;border-radius:6px;background:#C026D3;color:#fff;font:700 12px var(--f-body);border:2px solid #fff;box-shadow:0 0 0 4px rgba(192,38,211,.35),0 2px 6px rgba(0,0,0,.35)}
 .wh-pin span{background:#fff;color:#701A75;font:600 12px var(--f-body);padding:2px 6px;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .wh-pin.spoke b{background:#7C3AED;width:20px;height:20px;border-radius:50%;box-shadow:0 0 0 3px rgba(124,58,237,.3),0 2px 6px rgba(0,0,0,.35)}
+.estbox{padding:8px 4px;line-height:1.7;font-size:13px}
+.estbox .tag{margin-right:4px}
+tr.estrow td{background:var(--surface-2,#F6F7FB)}
 .wh-pin em{font-style:normal;background:#F2A516;color:#1A1405;font:700 11px var(--f-body);padding:1px 6px;border-radius:999px}
 .trip td{background:#F6F2FB;font-weight:600}
 .tag.wh{background:#FAE8FF;color:#86198F}
@@ -346,11 +349,13 @@ function renderDispatch(){
   $("dStats").innerHTML=`<div class="stat"><span class="muted">Parcels waiting</span><b>${S.suggest.length}</b></div><div class="stat"><span class="muted">Trips ready to send</span><b>${tripCount}</b></div><div class="stat"><span class="muted">Trucks ready</span><b>${S.trucks.filter(usable).length} / ${S.trucks.length}</b></div><div class="stat"><span class="muted">Warehouses</span><b>${(S.wh||[]).filter(w=>w.active).length}</b></div>`;
   $("dConfirm").disabled=!tripCount;$("dConfirm").textContent=tripCount?`Send ${tripCount} ready trip${tripCount>1?"s":""} (${readyParcels} parcel${readyParcels>1?"s":""})`:"No trip ready yet";
   const wn=c=>c?(wh.get(c)?.name||c):"—";
-  $("dBody").innerHTML=[...trips.values()].map(t=>{const kg=t.rows.reduce((a,r)=>a+(+r.o.charged_kg||0),0);
-    return `<tr class="trip"><td>${t.truck?"Trip":"Waiting"} · ${t.rows.length} parcel${t.rows.length>1?"s":""}</td><td>${esc(wn(t.from))}</td><td>${esc(wn(t.to))}</td><td>${kg} kg</td>
+  S.dTrips=[...trips.values()];
+  $("dBody").innerHTML=S.dTrips.map((t,ti)=>{const kg=t.rows.reduce((a,r)=>a+(+r.o.charged_kg||0),0),ek=estKey(t),ce=S.est.get(ek);
+    return `<tr class="trip"><td>${t.truck?"Trip":"Waiting"} · ${t.rows.length} parcel${t.rows.length>1?"s":""}${t.truck?` <button class="btn ghost" data-est="${ti}" type="button">${ce?"Re-estimate":"Estimate cost"}</button>`:""}</td><td>${esc(wn(t.from))}</td><td>${esc(wn(t.to))}</td><td>${kg} kg</td>
       <td>${t.truck?`<span class="${t.fill>=minFill?"pos":""}">${t.fill.toFixed(1)}%</span>`:"—"}</td>
       <td>${t.truck?`<span class="mono">${esc(t.truck)}</span>`:'<span class="tag bad">None</span>'}</td><td>${t.km!=null?t.km+" km":"—"}</td><td>${t.truck?inr(est(t)):"—"}</td><td>${!t.truck?esc(t.rows[0].s.reason):t.ready?'<span class="tag ok">Ready to send</span> '+esc(t.rows[0].s.reason)
         :`<span class="tag warn">Holding</span> Leaves when ${minFill}% full or at ${new Date(t.leaveAt).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})} <button class="btn ghost" data-sendnow="${esc(t.rows.map(r=>r.s.awb).join(","))}">Send now</button>`}</td></tr>`+
+      (ce?`<tr class="estrow"><td colspan="9">${ce.error?`<span class="tag bad">Estimate failed</span> ${esc(ce.error)}`:estimateHtml(ce)}</td></tr>`:"")+
       t.rows.map(({s,o})=>`<tr><td class="mono" style="padding-left:24px">${esc(s.awb)}</td><td></td><td></td><td>${o.charged_kg??"—"} kg</td><td></td><td></td><td></td><td></td><td class="muted">${s.reason!==t.rows[0].s.reason?esc(s.reason):""}</td></tr>`).join("")}).join("")
     ||'<tr><td colspan="9" class="muted">No parcels are waiting for a truck.</td></tr>';
   if(!map)return; layer.clearLayers(); const pts=[];
@@ -373,6 +378,16 @@ $("dArea").addEventListener("change",e=>{if(!map)return;const v=e.target.value;
   if(v){const [a,b,z]=v.split(",").map(Number);map.setView([a,b],z)} else if(S.pts?.length)map.fitBounds(S.pts,{padding:[30,30],maxZoom:12})});
 $("dSuggest").addEventListener("click",loadSuggest);
 $("dKm").addEventListener("change",loadSuggest);$("dFresh").addEventListener("change",loadSuggest);
+// estimate key: the same truck, leg and parcels
+S.est=new Map();
+function estKey(t){return [t.truck,t.from,t.to,t.rows.map(r=>r.s.awb).sort().join(",")].join("|")}
+$("dBody").addEventListener("click",async e=>{const b=e.target.closest("[data-est]");if(!b)return;
+  const t=S.dTrips[+b.dataset.est],tr=S.trucks.find(x=>x.truck_no===t.truck)||{};
+  b.disabled=true;b.textContent="Estimating…";
+  try{S.est.set(estKey(t),await estimateLeg(t.from,t.to,tr.toll_class||"upto_3_axle",+tr.capacity_kg||15000,t.rows.map(r=>r.s.awb),+t.km||0))}
+  catch(err){S.est.set(estKey(t),{error:err.message||String(err)})}
+  renderDispatch();
+});
 $("dBody").addEventListener("click",async e=>{const b=e.target.closest("[data-sendnow]");if(!b)return;
   const why=(prompt("This truck is below its fill target and will likely lose money. Why send it now? (Saved with the trip)")||"").trim();
   if(why.length<3){toast("Not sent: a reason is needed");return}
@@ -382,6 +397,9 @@ $("dBody").addEventListener("click",async e=>{const b=e.target.closest("[data-se
   await Promise.all([loadOrders(),loadTrucks()]);loadSuggest();
 });
 $("dConfirm").addEventListener("click",async()=>{
+  // warn only: trips estimated below breakeven are listed before sending
+  const losing=(S.dTrips||[]).filter(t=>t.truck&&t.ready).map(t=>({t,e:S.est.get(estKey(t))})).filter(x=>x.e&&!x.e.error&&+x.e.profit<0);
+  if(losing.length&&!confirm("Estimated to lose money:\n"+losing.map(({t,e})=>`${t.truck} ${t.from}→${t.to}: ₹${e.profit} (needs ${e.breakeven_kg??"?"} kg)`).join("\n")+"\n\nSend anyway?"))return;
   $("dConfirm").disabled=true;
   const {data,error}=await sb.rpc("confirm_allocations",{p_max_km:+$("dKm").value||null,p_fresh_min:+$("dFresh").value||null});
   toast(error?error.message:`${data} parcel${data===1?"":"s"} sent to trucks`);
@@ -500,7 +518,7 @@ $("mBody").addEventListener("click",async e=>{if(!e.target.matches("[data-costs]
   const {error}=await sb.from("trip_costs").upsert({trip_key:k,fuel_rs:+fuel});toast(error?error.message:"Fuel bill saved");loadMoney()});
 
 // ---------- flags
-const RULE_NAME={R2:"GPS",R3:"Scans",R5:"Waiting reason",R6:"Real fuel",R8:"Truck earns its share",R10:"Manual changes",R11:"Gaming check",R12:"Every order placed"};
+const RULE_NAME={R2:"GPS",R3:"Scans",R5:"Waiting reason",R6:"Real costs",R8:"Truck earns its share",R10:"Manual changes",R11:"Gaming check",R12:"Every order placed",R13:"Driver hours",R15:"Expressway tolls"};
 async function loadFlags(){
   const {data,error}=await sb.from("rule_flags").select("*").order("at",{ascending:false}).limit(300);
   if(error){$("fBody").innerHTML=`<tr><td colspan="4" class="muted">${/rule_flags/.test(error.message)?"Flags are not set up yet. In Supabase, SQL Editor, run supabase/migration_005_money_rules.sql.":esc(error.message)}</td></tr>`;return}
@@ -510,6 +528,42 @@ async function loadFlags(){
   $("fBody").innerHTML=rows.map(r=>`<tr><td><span class="tag ${r.severity==="STOP"?"bad":"warn"}">${esc(r.rule)} ${r.severity}</span><div class="muted" style="font-size:12px">${esc(RULE_NAME[r.rule]||"")}</div></td><td><b>${esc(r.title)}</b></td><td>${esc(r.detail)}</td><td>${r.at?new Date(r.at).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}</td></tr>`).join("")
     ||'<tr><td colspan="4" class="muted">No flags. Every rule passes right now.</td></tr>';
 }
+// ---------- cost estimate BEFORE a trip (same formulas as the Money tab, done by estimate_leg in the database)
+// The page adds what only a road map knows: road km (OpenStreetMap routing), toll plazas within 300 m of
+// that road with their km from the start, and km on each closed-loop expressway (between its first and last gantry).
+const ROUTES=new Map();
+function segKm(plat,plon,alat,alon,blat,blon){const kx=111.32*Math.cos((alat+blat)/2*Math.PI/180),ky=110.57;
+  const bx=(blon-alon)*kx,by=(blat-alat)*ky,px=(plon-alon)*kx,py=(plat-alat)*ky,l2=bx*bx+by*by;
+  const t=l2?Math.max(0,Math.min(1,(px*bx+py*by)/l2)):0;return{d:Math.hypot(px-t*bx,py-t*by),t}}
+async function estimateLeg(fromCode,toCode,cls,cap,awbs,toWhKm=0){
+  const W=new Map((S.wh||[]).map(w=>[w.code,w])),a=W.get(fromCode),b=W.get(toCode);
+  if(!a||!b)throw new Error("Warehouse missing for "+fromCode+" → "+toCode);
+  const road=await osrmRoute([a.lat,a.lon],[b.lat,b.lon]);
+  const cum=[0];road.dist.forEach((d,i)=>cum.push(cum[i]+d/1000));const roadKm=cum[cum.length-1];
+  const lats=road.coords.map(c=>c[0]),lons=road.coords.map(c=>c[1]);
+  const {data:plz}=await sb.from("toll_plazas").select("id,name,lat,lon,nh,closed_loop").gte("lat",Math.min(...lats)-0.01).lte("lat",Math.max(...lats)+0.01)
+    .gte("lon",Math.min(...lons)-0.01).lte("lon",Math.max(...lons)+0.01).limit(2000).then(r=>r,()=>({data:[]}));
+  const open=[],gantries=[];
+  (plz||[]).forEach(p=>{let best=null;
+    for(let i=0;i<road.coords.length-1;i++){const [alat,alon]=road.coords[i],[blat,blon]=road.coords[i+1];
+      if(p.lat<Math.min(alat,blat)-0.01||p.lat>Math.max(alat,blat)+0.01||p.lon<Math.min(alon,blon)-0.01||p.lon>Math.max(alon,blon)+0.01)continue;
+      const s=segKm(p.lat,p.lon,alat,alon,blat,blon);if(!best||s.d<best.d)best={d:s.d,at:cum[i]+s.t*(cum[i+1]-cum[i])}}
+    if(best&&best.d<=0.3){if(p.closed_loop)gantries.push({nh:(p.nh||"").replace(/\s/g,"").toUpperCase(),at:best.at});else open.push({id:p.id,at_km:+best.at.toFixed(1)})}});
+  const byNh=new Map();gantries.forEach(g=>{const r=byNh.get(g.nh)||{min:1e9,max:-1};r.min=Math.min(r.min,g.at);r.max=Math.max(r.max,g.at);byNh.set(g.nh,r)});
+  const xway=[...byNh.entries()].filter(([,r])=>r.max>r.min).map(([nh,r])=>({nh,km:+(r.max-r.min).toFixed(1)}));
+  const {data,error}=await sb.rpc("estimate_leg",{p_from:fromCode,p_to:toCode,p_class:cls,p_capacity:cap,p_awbs:awbs,
+    p_road_km:+roadKm.toFixed(1),p_to_wh_km:+toWhKm||0,p_plazas:open,p_xway:xway});
+  if(error)throw error;return data;
+}
+const money=n=>`<span class="${n<0?"neg":"pos"}">${n<0?"−":""}${inr(Math.abs(n))}</span>`;
+function estimateHtml(e){
+  return `<div class="estbox"><b>Estimate before the trip:</b> ${(+e.km_loaded).toLocaleString("en-IN")} km loaded + ${(+e.km_empty).toLocaleString("en-IN")} km empty · about ${e.hours} h
+    · Fuel ${inr(e.fuel)} · Tolls ${inr(e.tolls)} <span class="muted">(${e.toll_plazas} NHAI plaza${e.toll_plazas===1?"":"s"})</span> · Maintenance ${inr(e.maintenance)} <span class="est">ASSUMED</span> · Driver ${inr(e.driver)}
+    · <b>Cost ${inr(e.cost)}</b> · Revenue ${inr(e.revenue)} · <b>Profit ${money(+e.profit)}</b>${e.breakeven_kg!=null?` · Breakeven ${(+e.breakeven_kg).toLocaleString("en-IN")} kg`:""}
+    <div class="muted" style="font-size:12px">Speed ${e.speed_kmh} km/h: ${esc(e.speed_source)}. Fuel at ₹${e.diesel_price}/L (IndianOil). Same formulas as the Money tab.</div>
+    ${(e.warnings||[]).map(w=>`<div><span class="tag warn">Warning</span> ${esc(w)}</div>`).join("")}</div>`;
+}
+
 // ---------- simulator: hub-and-spoke relay, always replayed in 5 minutes
 // One simulated truck per leg (based at the leg's start hub): it loads by scan, drives the real road leg,
 // pays official NHAI tolls, is unloaded by scan at the next hub, then drives back empty to its base.
@@ -538,10 +592,32 @@ async function loadSim(){
   const {count}=await sb.from("toll_plazas").select("id",{count:"exact",head:true}).then(r=>r,()=>({count:null}));
   $("sNote").hidden=!!count;
   $("sNote").textContent=count===null?"Simulator needs the latest database update: run supabase/migration_007_hub_spoke.sql.":"No official NHAI toll plazas are imported yet, so tolls will show ₹0. Run tools/import_nhai_tolls.py (see README).";
-  renderSimRoute();
+  renderSimRoute();simEstimate();
 }
-$("sClass").addEventListener("change",()=>{$("sCap").value=CLASS_INFO[$("sClass").value][1]});
-$("sLane").addEventListener("change",()=>renderSimRoute());
+// parcels that fit the truck on the chosen route (oldest first) - the same pick the simulation uses
+function simPick(route,cap){
+  const waiting=S.orders.filter(o=>o.status==="booked"&&!o.truck_no&&o.leg_no===1&&(o.route||[]).join(">")===route.join(">")).sort((a,b)=>a.created_at.localeCompare(b.created_at));
+  const pick=[];let kg=0;waiting.forEach(o=>{if(kg+ +o.charged_kg<=cap){pick.push(o);kg+= +o.charged_kg}});return pick}
+async function simEstimate(){
+  const route=($("sLane").value||"").split(">").filter(Boolean);if(route.length<2||SIM.running)return;
+  const cap=+$("sCap").value||15000,cls=$("sClass").value,pick=simPick(route,cap),run=(SIM.estRun=(SIM.estRun||0)+1);
+  if(!pick.length)return;
+  $("sResult").innerHTML='<p class="muted">Estimating the cost before the trip…</p>';
+  try{
+    const legs=[];for(let i=0;i<route.length-1;i++)legs.push(await estimateLeg(route[i],route[i+1],cls,cap,pick.map(o=>o.awb),0));
+    if(run!==SIM.estRun)return;SIM.est=legs;
+    const sum=f=>legs.reduce((a,e)=>a+(+e[f]||0),0),warn=legs.flatMap((e,i)=>(e.warnings||[]).map(w=>`Leg ${i+1}: ${w}`));
+    $("sResult").innerHTML=`<p style="margin:0 0 6px"><b>Estimate before the trip</b> <span class="muted">(${pick.length} parcels, ${Math.round(pick.reduce((a,o)=>a+ +o.charged_kg,0))} kg)</span></p>
+      <div class="tw" style="max-height:none"><table style="min-width:560px"><thead><tr><th>Leg</th><th>Km (loaded + empty)</th><th>Hours</th><th>Fuel</th><th>Tolls</th><th>Maint.</th><th>Driver</th><th>Cost</th><th>Profit</th></tr></thead><tbody>
+      ${legs.map((e,i)=>`<tr><td>${i+1}. ${esc(whName(e.from))} → ${esc(whName(e.to))}</td><td>${e.km_loaded} + ${e.km_empty}</td><td>${e.hours}</td><td>${inr(e.fuel)}</td><td>${inr(e.tolls)}</td><td>${inr(e.maintenance)}</td><td>${inr(e.driver)}</td><td>${inr(e.cost)}</td><td>${money(+e.profit)}</td></tr>`).join("")}
+      <tr class="trip"><td>Total</td><td>${Math.round(sum("km_loaded"))} + ${Math.round(sum("km_empty"))}</td><td>${sum("hours").toFixed(1)}</td><td>${inr(sum("fuel"))}</td><td>${inr(sum("tolls"))}</td><td>${inr(sum("maintenance"))}</td><td>${inr(sum("driver"))}</td><td>${inr(sum("cost"))}</td><td>${money(sum("profit"))}</td></tr></tbody></table></div>
+      ${warn.map(w=>`<div style="margin-top:4px"><span class="tag warn">Warning</span> ${esc(w)}</div>`).join("")}
+      <p class="muted" style="margin:6px 0 0">Same formulas as the Money tab. After the run, actual and estimate are shown side by side.</p>`;
+  }catch(e){if(run===SIM.estRun)$("sResult").innerHTML=`<p><span class="tag bad">Estimate failed</span> ${esc(e.message||String(e))}</p>`}
+}
+$("sClass").addEventListener("change",()=>{$("sCap").value=CLASS_INFO[$("sClass").value][1];simEstimate()});
+$("sCap").addEventListener("change",()=>simEstimate());
+$("sLane").addEventListener("change",()=>{renderSimRoute();simEstimate()});
 function renderSimRoute(){
   const r=($("sLane").value||"").split(">").filter(Boolean);if(!SIM.map||r.length<2)return;
   SIM.layer.clearLayers();SIM.markers.clear();
@@ -553,10 +629,12 @@ function renderSimRoute(){
 }
 
 async function osrmRoute(a,b){
+  const key=a.join()+";"+b.join();if(ROUTES.has(key))return ROUTES.get(key);
   const r=await fetch(`https://router.project-osrm.org/route/v1/driving/${a[1]},${a[0]};${b[1]},${b[0]}?overview=full&geometries=geojson&annotations=distance,duration`);
   if(!r.ok)throw new Error("Road routing service did not answer ("+r.status+")");
   const j=await r.json();if(j.code!=="Ok"||!j.routes?.length)throw new Error("No road route found");
-  return{coords:j.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]),dist:j.routes[0].legs[0].annotation.distance,dur:j.routes[0].legs[0].annotation.duration};
+  const out={coords:j.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]),dist:j.routes[0].legs[0].annotation.distance,dur:j.routes[0].legs[0].annotation.duration};
+  ROUTES.set(key,out);return out;
 }
 const reverseRoute=r=>({coords:[...r.coords].reverse(),dist:[...r.dist].reverse(),dur:[...r.dur].reverse()});
 // Points every 0.5 km with times: road time per stretch, never faster than SIM_MAX_KMH
@@ -572,11 +650,10 @@ const addMin=(d,m)=>new Date(d.getTime()+m*60000);
 $("sStart").addEventListener("click",async()=>{
   if(SIM.running)return;const route=$("sLane").value.split(">");if(route.length<2)return;
   const W=new Map((S.wh||[]).map(w=>[w.code,w])),cap=+$("sCap").value||15000,cls=$("sClass").value;
-  const waiting=S.orders.filter(o=>o.status==="booked"&&!o.truck_no&&o.leg_no===1&&(o.route||[]).join(">")===route.join(">")).sort((a,b)=>a.created_at.localeCompare(b.created_at));
-  const pick=[];let kg=0;waiting.forEach(o=>{if(kg+ +o.charged_kg<=cap){pick.push(o);kg+= +o.charged_kg}});
+  const pick=simPick(route,cap),kg=pick.reduce((a,o)=>a+ +o.charged_kg,0),est=SIM.est;
   if(!pick.length){toast("No parcel fits this truck");return}
   SIM.running=true;SIM.stop=false;$("sStart").disabled=true;$("sStop").hidden=false;$("sLog").innerHTML="";
-  $("sResult").innerHTML='<p class="muted">Appears when the last truck is back at its base.</p>';
+  SIM.estUsed=est;$("sResult").innerHTML='<p class="muted">Appears when the last truck is back at its base, next to the estimate.</p>';
   try{
     $("sPhase").textContent="Finding road routes for each leg…";
     const legs=[];
@@ -654,7 +731,8 @@ async function simPings(pings,st,legOf){
     m.setLatLng([e.p.lat,e.p.lon])});
   const {data:te}=await sb.from("toll_events").select("*").gte("at",st.t0.toISOString()).order("at",{ascending:true});
   (te||[]).forEach(e=>{if(st.tollSeen.has(e.id)||!legOf.has(e.truck_no))return;st.tollSeen.add(e.id);st.tolls+= +e.amount;
-    simLog(new Date(e.at),`Toll (leg ${legOf.get(e.truck_no)+1}): <b>${esc(e.plaza_name)}</b> ₹${e.amount}${e.rate_missing?' <span class="tag warn">no NHAI rate for this class</span>':""}`);
+    simLog(new Date(e.at),e.closed_loop?`Expressway gantry (leg ${legOf.get(e.truck_no)+1}): <b>${esc(e.plaza_name)}</b>${e.km!=null?` · ${e.km} km since the last gantry ${e.rate_missing?'<span class="tag warn">no official per-km rate entered</span>':"₹"+e.amount}`:" · entry"}`
+      :`Toll (leg ${legOf.get(e.truck_no)+1}): <b>${esc(e.plaza_name)}</b> ₹${e.amount}${e.rate_missing?' <span class="tag warn">no NHAI rate for this class</span>':""}`);
     const mk=SIM.plazaMarks?.get(e.plaza_id);if(mk)mk.setStyle({fillColor:"#DC2626",radius:5})});
 }
 async function simEvent(e,st){const L_=st.legs[e.leg];
@@ -670,10 +748,11 @@ async function simResult(legs){
   const rows=[];for(const L_ of legs){const {data}=await sb.from("trip_pnl").select("*").eq("truck_no",L_.truck).limit(1);if(data?.[0])rows.push(data[0])}
   if(!rows.length)return;
   const sum=f=>rows.reduce((a,r)=>a+(+r[f]||0),0);
-  const money=n=>`<span class="${n<0?"neg":"pos"}">${n<0?"−":""}${inr(Math.abs(n))}</span>`;
-  $("sResult").innerHTML=`<div class="tw" style="max-height:none"><table style="min-width:640px"><thead><tr><th>Leg</th><th>Truck</th><th>Km (loaded + back empty)</th><th>Revenue</th><th>Fuel</th><th>Tolls</th><th>Maint.</th><th>Driver</th><th>Profit</th></tr></thead><tbody>
-    ${rows.map((r,i)=>`<tr><td>${i+1}. ${esc(r.from_name)} → ${esc(r.to_name)}</td><td class="mono">${esc(r.truck_no)}</td><td>${(+r.km_loaded).toLocaleString("en-IN")} + ${(+r.km_empty).toLocaleString("en-IN")}</td><td>${inr(r.revenue)}</td><td>${inr(r.fuel)}</td><td>${inr(r.tolls)} <span class="muted">(${r.toll_count})</span></td><td>${inr(r.maintenance)}</td><td>${inr(r.driver_pay)}</td><td>${money(+r.profit)}</td></tr>`).join("")}
-    <tr class="trip"><td>Total</td><td>${rows.length} trucks</td><td>${Math.round(sum("km_loaded")).toLocaleString("en-IN")} + ${Math.round(sum("km_empty")).toLocaleString("en-IN")}</td><td>${inr(sum("revenue"))}</td><td>${inr(sum("fuel"))}</td><td>${inr(sum("tolls"))}</td><td>${inr(sum("maintenance"))}</td><td>${inr(sum("driver_pay"))}</td><td>${money(sum("profit"))}</td></tr>
+  const E=SIM.estUsed||[],eSum=f=>E.reduce((a,e)=>a+(+e[f]||0),0);
+  const gap=(a,e)=>e==null?"—":`${inr(e)} <span class="muted">(${a>=e?"+":"−"}${inr(Math.abs(Math.round(a-e)))})</span>`;
+  $("sResult").innerHTML=`<div class="tw" style="max-height:none"><table style="min-width:760px"><thead><tr><th>Leg</th><th>Truck</th><th>Km (loaded + back empty)</th><th>Revenue</th><th>Fuel</th><th>Tolls</th><th>Maint.</th><th>Driver</th><th>Actual cost</th><th>Estimated cost (gap)</th><th>Profit</th></tr></thead><tbody>
+    ${rows.map((r,i)=>`<tr><td>${i+1}. ${esc(r.from_name)} → ${esc(r.to_name)}</td><td class="mono">${esc(r.truck_no)}</td><td>${(+r.km_loaded).toLocaleString("en-IN")} + ${(+r.km_empty).toLocaleString("en-IN")}</td><td>${inr(r.revenue)}</td><td>${inr(r.fuel)}</td><td>${inr(r.tolls)} <span class="muted">(${r.toll_count})</span></td><td>${inr(r.maintenance)}</td><td>${inr(r.driver_pay)}</td><td>${inr(r.cost)}</td><td>${gap(+r.cost,E[i]?.cost)}</td><td>${money(+r.profit)}</td></tr>`).join("")}
+    <tr class="trip"><td>Total</td><td>${rows.length} trucks</td><td>${Math.round(sum("km_loaded")).toLocaleString("en-IN")} + ${Math.round(sum("km_empty")).toLocaleString("en-IN")}</td><td>${inr(sum("revenue"))}</td><td>${inr(sum("fuel"))}</td><td>${inr(sum("tolls"))}</td><td>${inr(sum("maintenance"))}</td><td>${inr(sum("driver_pay"))}</td><td>${inr(sum("cost"))}</td><td>${E.length?gap(sum("cost"),eSum("cost")):"—"}</td><td>${money(sum("profit"))}</td></tr>
   </tbody></table></div>
   <p class="muted" style="margin:8px 0 0">Fuel at ₹${rows[0].diesel_price}/L (IndianOil) · tolls are official NHAI fees · maintenance assumed · longest leg ${Math.round(Math.max(...rows.map(r=>+r.km_loaded)))} km loaded.</p>`;
   simLog(new Date(),`Relay finished. Total profit ${money(sum("profit"))}. Each leg is also on the Money tab.`);

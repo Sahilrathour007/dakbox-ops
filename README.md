@@ -130,6 +130,7 @@ Run once each in the Supabase SQL Editor, if your database is older than the fea
 7. `supabase/migration_006_tolls_simulation.sql`
 8. `supabase/migration_007_hub_spoke.sql` (hub-and-spoke network; safe to run again)
 9. `supabase/migration_008_pincode_regions.sql` (every pincode finds its nearest warehouse; safe to run again)
+10. `supabase/migration_009_expressway_estimate.sql` (closed-loop expressway tolls, cost estimate before a trip; safe to run again)
 
 ## Warehouse page (loading and unloading by scan)
 `warehouse.html`, e.g. https://sahilrathour007.github.io/dakbox-ops/warehouse.html
@@ -200,3 +201,14 @@ Pick a route with waiting parcels and a truck type. The simulator runs the whole
 4. the parcels are sorted at the hub (`settings.hub_sort_minutes`, 30) and the next leg's truck takes them.
 Truck speed follows the road (never above 60 km/h). The toll rule is unchanged: passing the same plaza again within 6 hours counts as the return trip and is not charged again.
 **The whole relay always replays in 5 minutes**, however long it is, and simulated time ends at the current moment. Costs are worked out only from the simulated positions and scans, never from the replay speed, so a faster or slower replay gives exactly the same costs. The result per leg and in total appears at the end and on the Money tab. Simulated trucks are marked `is_simulated`, never get real parcels from dispatch, and are set to off duty afterwards.
+
+## Closed-loop expressway tolls
+On closed-loop expressways (Delhi-Mumbai Expressway NE-4, Delhi-Meerut Expressway, and others; NHAI names their gantries "Close Loop Toll" or "Entry Exit"), the fee depends on where you enter and exit, so NHAI publishes no fee per gantry.
+- Gantries are never charged one by one. When a truck passes two gantries in a row and drove straight between them (GPS km at most 1.5 x the straight distance), that stretch is charged: **GPS km x the official per-km rate** from table `expressway_rates`.
+- `expressway_rates` starts **empty on purpose**. Enter each expressway's official per-km rate per truck class, with the notification as `source_url` (Table Editor). `nh` is written without spaces, upper case, as in the toll data (e.g. `NE-4`, `9`, `334`).
+- Until a rate is entered, the km are flagged as **R15 "Expressway toll not costed"** instead of silently counting as Rs 0.
+
+## Cost estimate before a trip (warn only)
+- **Dispatch:** "Estimate cost" on a trip shows km, hours, fuel, NHAI tolls, maintenance, driver, cost, revenue, profit and breakeven kg, with warnings (below breakeven, missing toll rates, expressway km not costed, leg over the limit). Sending a ready trip that is estimated to lose money asks for confirmation; nothing is blocked.
+- **Simulator:** the estimate appears before you press Start, and the result shows actual cost next to estimated cost per leg.
+- The database function `estimate_leg` uses the same settings and formulas as the Money tab; the page adds only the road km (OpenStreetMap routing), the plazas within 300 m of that road and the km on each expressway. Speed comes from GPS on past trips of the same leg, else 60 km/h (shown as ASSUMED).
