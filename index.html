@@ -122,7 +122,7 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
       <button class="btn ghost" id="dSuggest" type="button">Refresh suggestions</button>
       <button class="btn" id="dConfirm" type="button" disabled>Confirm allocation</button>
       <button class="btn ghost" id="dSave" type="button">Save as default</button>
-      <label>Zoom to<select id="dArea"><option value="">Everything</option><option value="28.60,77.15,11">Delhi NCR</option><option value="19.08,72.90,11">Mumbai</option><option value="18.52,73.86,12">Pune</option><option value="12.97,77.59,11">Bengaluru</option></select></label>
+      <label>Zoom to<select id="dArea"><option value="">Everything</option><option value="trucks">Trucks with live GPS</option><option value="28.60,77.15,11">Delhi NCR</option><option value="19.08,72.90,11">Mumbai</option><option value="18.52,73.86,12">Pune</option><option value="12.97,77.59,11">Bengaluru</option></select></label>
     </div>
     <div class="stats" id="dStats"></div>
     <div class="banner" id="whNote" hidden></div>
@@ -258,7 +258,7 @@ $("logout").addEventListener("click",()=>sb.auth.signOut());
 // ---------- data
 async function loadOrders(){const {data,error}=await sb.from("orders").select("*").order("created_at",{ascending:false}).limit(500);if(!error){S.orders=data;renderOrders();renderTrucks();}}
 async function loadWarehouses(){const {data,error}=await sb.from("warehouses").select("*").order("code");if(error){S.wh=[];$("whNote").hidden=false;$("whNote").textContent="Warehouses are not set up in the database yet. In Supabase, SQL Editor, run supabase/migration_003_warehouses.sql, then reload this page.";return}if(!error){S.wh=data;$("whNote").hidden=data.length>0;$("whNote").textContent="No warehouses in the database yet. Add them in Supabase (table: warehouses).";renderTrucks();if(S.view==="dispatch")renderDispatch()}}
-async function loadTrucks(){const {data,error}=await sb.from("trucks").select("*").order("truck_no");if(!error){S.trucks=data;renderTrucks();}}
+async function loadTrucks(){const {data,error}=await sb.from("trucks").select("*").eq("is_simulated",false).order("truck_no");if(!error){S.trucks=data;renderTrucks();}}
 async function loadSettings(){const {data}=await sb.from("settings").select("*").eq("id",1).maybeSingle();if(data)S.settings=data;$("dKm").value=S.settings.max_distance_km;$("dFresh").value=S.settings.gps_fresh_minutes}
 async function loadSuggest(){
   const {data,error}=await sb.rpc("suggest_allocations",{p_max_km:+$("dKm").value||null,p_fresh_min:+$("dFresh").value||null});
@@ -349,13 +349,13 @@ function renderDispatch(){
   $("dStats").innerHTML=`<div class="stat"><span class="muted">Parcels waiting</span><b>${S.suggest.length}</b></div><div class="stat"><span class="muted">Trips ready to send</span><b>${tripCount}</b></div><div class="stat"><span class="muted">Trucks ready</span><b>${S.trucks.filter(usable).length} / ${S.trucks.length}</b></div><div class="stat"><span class="muted">Warehouses</span><b>${(S.wh||[]).filter(w=>w.active).length}</b></div>`;
   $("dConfirm").disabled=!tripCount;$("dConfirm").textContent=tripCount?`Send ${tripCount} ready trip${tripCount>1?"s":""} (${readyParcels} parcel${readyParcels>1?"s":""})`:"No trip ready yet";
   const wn=c=>c?(wh.get(c)?.name||c):"—";
-  S.dTrips=[...trips.values()];
+  S.dTrips=[...trips.values()];setTimeout(autoEstimate,0);
   $("dBody").innerHTML=S.dTrips.map((t,ti)=>{const kg=t.rows.reduce((a,r)=>a+(+r.o.charged_kg||0),0),ek=estKey(t),ce=S.est.get(ek);
-    return `<tr class="trip"><td>${t.truck?"Trip":"Waiting"} · ${t.rows.length} parcel${t.rows.length>1?"s":""}${t.truck?` <button class="btn ghost" data-est="${ti}" type="button">${ce?"Re-estimate":"Estimate cost"}</button>`:""}</td><td>${esc(wn(t.from))}</td><td>${esc(wn(t.to))}</td><td>${kg} kg</td>
+    return `<tr class="trip"><td>${t.truck?"Trip":"Waiting"} · ${t.rows.length} parcel${t.rows.length>1?"s":""} <button class="btn ghost" data-est="${ti}" type="button">${ce?"Re-estimate":"Estimate cost"}</button></td><td>${esc(wn(t.from))}</td><td>${esc(wn(t.to))}</td><td>${kg} kg</td>
       <td>${t.truck?`<span class="${t.fill>=minFill?"pos":""}">${t.fill.toFixed(1)}%</span>`:"—"}</td>
       <td>${t.truck?`<span class="mono">${esc(t.truck)}</span>`:'<span class="tag bad">None</span>'}</td><td>${t.km!=null?t.km+" km":"—"}</td><td>${t.truck?inr(est(t)):"—"}</td><td>${!t.truck?esc(t.rows[0].s.reason):t.ready?'<span class="tag ok">Ready to send</span> '+esc(t.rows[0].s.reason)
         :`<span class="tag warn">Holding</span> Leaves when ${minFill}% full or at ${new Date(t.leaveAt).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})} <button class="btn ghost" data-sendnow="${esc(t.rows.map(r=>r.s.awb).join(","))}">Send now</button>`}</td></tr>`+
-      (ce?`<tr class="estrow"><td colspan="9">${ce.error?`<span class="tag bad">Estimate failed</span> ${esc(ce.error)}`:estimateHtml(ce)}</td></tr>`:"")+
+      `<tr class="estrow"><td colspan="9">${!ce?'<span class="muted">Estimating cost…</span>':ce.error?`<span class="tag bad">Estimate failed</span> ${esc(ce.error)}`:(t.truck?"":`<span class="muted">No truck yet: estimated for a ${CLASS_INFO[DEFAULT_CLASS][0]}, ${CLASS_INFO[DEFAULT_CLASS][1].toLocaleString("en-IN")} kg, starting at the warehouse.</span>`)+estimateHtml(ce)}</td></tr>`+
       t.rows.map(({s,o})=>`<tr><td class="mono" style="padding-left:24px">${esc(s.awb)}</td><td></td><td></td><td>${o.charged_kg??"—"} kg</td><td></td><td></td><td></td><td></td><td class="muted">${s.reason!==t.rows[0].s.reason?esc(s.reason):""}</td></tr>`).join("")}).join("")
     ||'<tr><td colspan="9" class="muted">No parcels are waiting for a truck.</td></tr>';
   if(!map)return; layer.clearLayers(); const pts=[];
@@ -373,20 +373,33 @@ function renderDispatch(){
      .bindTooltip(`${w.code} · ${w.name}, ${w.city} · ${w.is_hub===false?"spoke (links to its nearest hub)":"hub"} · ${n} parcel${n===1?"":"s"} waiting`).addTo(layer)});
   S.pts=pts;
   if(!fitted&&pts.length){map.fitBounds(pts,{padding:[30,30],maxZoom:12});fitted=true}
+  const liveNow=S.trucks.filter(t=>t.last_lat!=null&&t.last_ping_at&&now-Date.parse(t.last_ping_at)<=fresh).map(t=>t.truck_no);
+  S.seenLive=S.seenLive||new Set();const fresh1=liveNow.filter(n=>!S.seenLive.has(n));liveNow.forEach(n=>S.seenLive.add(n));
+  if(fresh1.length&&S.liveInit){const t=S.trucks.find(x=>x.truck_no===fresh1[0]);map.setView([t.last_lat,t.last_lon],12);toast(t.truck_no+" is online")}
+  S.liveInit=true;
 }
 $("dArea").addEventListener("change",e=>{if(!map)return;const v=e.target.value;
-  if(v){const [a,b,z]=v.split(",").map(Number);map.setView([a,b],z)} else if(S.pts?.length)map.fitBounds(S.pts,{padding:[30,30],maxZoom:12})});
+  if(v==="trucks"){const fresh=(+$("dFresh").value||15)*60000,live=S.trucks.filter(t=>t.last_lat!=null&&t.last_ping_at&&Date.now()-Date.parse(t.last_ping_at)<=fresh);
+    if(live.length)map.fitBounds(live.map(t=>[t.last_lat,t.last_lon]),{padding:[40,40],maxZoom:13});else toast("No truck has sent GPS in the last "+$("dFresh").value+" min")}
+  else if(v){const [a,b,z]=v.split(",").map(Number);map.setView([a,b],z)} else if(S.pts?.length)map.fitBounds(S.pts,{padding:[30,30],maxZoom:12})});
 $("dSuggest").addEventListener("click",loadSuggest);
 $("dKm").addEventListener("change",loadSuggest);$("dFresh").addEventListener("change",loadSuggest);
 // estimate key: the same truck, leg and parcels
 S.est=new Map();
 function estKey(t){return [t.truck,t.from,t.to,t.rows.map(r=>r.s.awb).sort().join(",")].join("|")}
+const DEFAULT_CLASS="upto_3_axle";
+async function estimateTrip(t){const tr=S.trucks.find(x=>x.truck_no===t.truck)||{};
+  try{S.est.set(estKey(t),await estimateLeg(t.from,t.to,tr.toll_class||DEFAULT_CLASS,+tr.capacity_kg||CLASS_INFO[DEFAULT_CLASS][1],t.rows.map(r=>r.s.awb),t.truck?+t.km||0:0))}
+  catch(err){S.est.set(estKey(t),{error:err.message||String(err)})}}
+// every trip is estimated as soon as its parcels are waiting, one at a time (road routes are cached)
+async function autoEstimate(){
+  if(S.estBusy||S.view!=="dispatch")return;S.estBusy=true;
+  try{for(const t of (S.dTrips||[])){if(!t.from||!t.to||S.est.has(estKey(t)))continue;await estimateTrip(t);renderDispatch()}}
+  finally{S.estBusy=false}
+}
 $("dBody").addEventListener("click",async e=>{const b=e.target.closest("[data-est]");if(!b)return;
-  const t=S.dTrips[+b.dataset.est],tr=S.trucks.find(x=>x.truck_no===t.truck)||{};
-  b.disabled=true;b.textContent="Estimating…";
-  try{S.est.set(estKey(t),await estimateLeg(t.from,t.to,tr.toll_class||"upto_3_axle",+tr.capacity_kg||15000,t.rows.map(r=>r.s.awb),+t.km||0))}
-  catch(err){S.est.set(estKey(t),{error:err.message||String(err)})}
-  renderDispatch();
+  const t=S.dTrips[+b.dataset.est];b.disabled=true;b.textContent="Estimating…";
+  await estimateTrip(t);renderDispatch();
 });
 $("dBody").addEventListener("click",async e=>{const b=e.target.closest("[data-sendnow]");if(!b)return;
   const why=(prompt("This truck is below its fill target and will likely lose money. Why send it now? (Saved with the trip)")||"").trim();

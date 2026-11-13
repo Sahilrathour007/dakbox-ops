@@ -209,6 +209,9 @@ On closed-loop expressways (Delhi-Mumbai Expressway NE-4, Delhi-Meerut Expresswa
 - Until a rate is entered, the km are flagged as **R15 "Expressway toll not costed"** instead of silently counting as Rs 0.
 
 ## Cost estimate before a trip (warn only)
-- **Dispatch:** "Estimate cost" on a trip shows km, hours, fuel, NHAI tolls, maintenance, driver, cost, revenue, profit and breakeven kg, with warnings (below breakeven, missing toll rates, expressway km not costed, leg over the limit). Sending a ready trip that is estimated to lose money asks for confirmation; nothing is blocked.
+- **Dispatch:** every trip is estimated automatically as soon as its parcels are waiting (trips without a truck yet use an up-to-3-axle, 15,000 kg truck starting at the warehouse). The estimate shows km, hours, fuel, NHAI tolls, maintenance, driver, cost, revenue, profit and breakeven kg, with warnings (below breakeven, missing toll rates, expressway km not costed, leg over the limit). Sending a ready trip that is estimated to lose money asks for confirmation; nothing is blocked.
 - **Simulator:** the estimate appears before you press Start, and the result shows actual cost next to estimated cost per leg.
 - The database function `estimate_leg` uses the same settings and formulas as the Money tab; the page adds only the road km (OpenStreetMap routing), the plazas within 300 m of that road and the km on each expressway. Speed comes from GPS on past trips of the same leg, else 60 km/h (shown as ASSUMED).
+
+## Trucks tab and Dispatch show real trucks only
+Simulated trucks (`is_simulated`) are hidden there; they stay visible in the Simulator and on the Money tab. Dispatch → Zoom to → "Trucks with live GPS" jumps to trucks that sent GPS recently, and the map moves to a truck when it comes online.
