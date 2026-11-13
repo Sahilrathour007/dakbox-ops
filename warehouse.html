@@ -158,7 +158,7 @@ function renderTrucks(){
     const status=v&&v.arrived_at?`<span class="pill ${mins(v.arrived_at)>=DELAY_AFTER_MIN?"late":"here"}">Here ${mins(v.arrived_at)} min</span>`
       :dist!=null&&dist<=0.5?'<span class="pill here">Here</span>':`<span class="pill way">${dist!=null?(dist<10?dist.toFixed(1):Math.round(dist))+" km away":"On the way"}</span>`;
     return {here:!!(v&&v.arrived_at)||(dist!=null&&dist<=0.5),dist:dist??1e9,html:`<button class="card truck" type="button" data-t="${esc(t)}">
-      <span><b>${esc(t)}</b><br><span class="muted">${list.length} parcel${list.length>1?"s":""} · ${list.reduce((a,o)=>a+ +o.charged_kg,0)} kg${tr.driver_name?" · "+esc(tr.driver_name):""}</span></span>${status}</button>`}});
+      <span><b>${esc(t)}</b><br><span class="muted">${list.length} parcel${list.length>1?"s":""} · ${Math.round(list.reduce((a,o)=>a+ +o.charged_kg,0)*10)/10} kg${tr.driver_name?" · "+esc(tr.driver_name):""}</span></span>${status}</button>`}});
   rows.sort((a,b)=>(b.here-a.here)||(a.dist-b.dist));
   $("trucks").innerHTML=rows.map(r=>r.html).join("")||`<div class="card"><p><b>No trucks to ${S.mode==="load"?"load":"unload"} right now</b></p><p class="muted">Trucks with parcels for this warehouse appear here.</p></div>`;
 }

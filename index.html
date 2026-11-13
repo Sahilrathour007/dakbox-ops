@@ -129,8 +129,8 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
     <div id="dmap"></div>
     <div class="legend"><span><i style="background:#C026D3;border-radius:3px"></i>Warehouse (yellow badge = parcels waiting)</span><span><i style="background:var(--accent)"></i>Truck ready</span><span><i style="background:#9AA3B2"></i>Truck not usable (old GPS, full, off duty, on a trip)</span><span>Dashed line: truck suggested for that warehouse</span></div>
     <div class="tw"><table>
-      <thead><tr><th>Trip / AWB</th><th>From warehouse</th><th>To warehouse</th><th>Weight</th><th>Truck full</th><th>Truck</th><th>Truck to warehouse</th><th>Driver earns (trip, est.)</th><th>Why</th></tr></thead>
-      <tbody id="dBody"><tr><td colspan="9" class="muted">Loading…</td></tr></tbody>
+      <thead><tr><th>Trip / AWB</th><th>From warehouse</th><th>To warehouse</th><th>Weight</th><th>Truck full</th><th>Truck</th><th>Truck to warehouse</th><th>Driver earns (trip, est.)</th><th>Est. cost</th><th>Est. profit</th><th>Why</th></tr></thead>
+      <tbody id="dBody"><tr><td colspan="11" class="muted">Loading…</td></tr></tbody>
     </table></div>
   </section>
 
@@ -233,6 +233,7 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const inr=n=>"₹"+Number(n).toLocaleString("en-IN");
+const kgFmt=n=>(Math.round((+n||0)*10)/10).toLocaleString("en-IN");
 const ago=t=>{if(!t)return"never";const m=Math.round((Date.now()-Date.parse(t))/60000);return m<1?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"};
 const toast=m=>{const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,2600)};
 const STATUS={booked:"Booked",pickup_assigned:"Offered to driver",driver_accepted:"Driver on the way",picked_up:"Picked up",at_origin_hub:"At origin hub",in_transit:"In transit",at_destination_hub:"At destination hub",out_for_delivery:"Out for delivery",delivered:"Delivered",cancelled:"Cancelled"};
@@ -351,13 +352,14 @@ function renderDispatch(){
   const wn=c=>c?(wh.get(c)?.name||c):"—";
   S.dTrips=[...trips.values()];setTimeout(autoEstimate,0);
   $("dBody").innerHTML=S.dTrips.map((t,ti)=>{const kg=t.rows.reduce((a,r)=>a+(+r.o.charged_kg||0),0),ek=estKey(t),ce=S.est.get(ek);
-    return `<tr class="trip"><td>${t.truck?"Trip":"Waiting"} · ${t.rows.length} parcel${t.rows.length>1?"s":""} <button class="btn ghost" data-est="${ti}" type="button">${ce?"Re-estimate":"Estimate cost"}</button></td><td>${esc(wn(t.from))}</td><td>${esc(wn(t.to))}</td><td>${kg} kg</td>
+    return `<tr class="trip"><td>${t.truck?"Trip":"Waiting"} · ${t.rows.length} parcel${t.rows.length>1?"s":""} <button class="btn ghost" data-est="${ti}" type="button">${ce?"Re-estimate":"Estimate cost"}</button></td><td>${esc(wn(t.from))}</td><td>${esc(wn(t.to))}</td><td>${kgFmt(kg)} kg</td>
       <td>${t.truck?`<span class="${t.fill>=minFill?"pos":""}">${t.fill.toFixed(1)}%</span>`:"—"}</td>
-      <td>${t.truck?`<span class="mono">${esc(t.truck)}</span>`:'<span class="tag bad">None</span>'}</td><td>${t.km!=null?t.km+" km":"—"}</td><td>${t.truck?inr(est(t)):"—"}</td><td>${!t.truck?esc(t.rows[0].s.reason):t.ready?'<span class="tag ok">Ready to send</span> '+esc(t.rows[0].s.reason)
+      <td>${t.truck?`<span class="mono">${esc(t.truck)}</span>`:'<span class="tag bad">None</span>'}</td><td>${t.km!=null?t.km+" km":"—"}</td><td>${t.truck?inr(est(t)):"—"}</td><td>${ce&&!ce.error?`<b>${inr(ce.cost)}</b>`:ce?"—":'<span class="muted">…</span>'}</td><td>${ce&&!ce.error?`<b>${money(+ce.profit)}</b><div class="muted" style="font-size:12px">breakeven ${(+ce.breakeven_kg||0).toLocaleString("en-IN")} kg</div>`:ce?"—":'<span class="muted">…</span>'}</td><td>${!t.truck?esc(t.rows[0].s.reason):t.ready?'<span class="tag ok">Ready to send</span> '+esc(t.rows[0].s.reason)
         :`<span class="tag warn">Holding</span> Leaves when ${minFill}% full or at ${new Date(t.leaveAt).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})} <button class="btn ghost" data-sendnow="${esc(t.rows.map(r=>r.s.awb).join(","))}">Send now</button>`}</td></tr>`+
-      `<tr class="estrow"><td colspan="9">${!ce?'<span class="muted">Estimating cost…</span>':ce.error?`<span class="tag bad">Estimate failed</span> ${esc(ce.error)}`:(t.truck?"":`<span class="muted">No truck yet: estimated for a ${CLASS_INFO[DEFAULT_CLASS][0]}, ${CLASS_INFO[DEFAULT_CLASS][1].toLocaleString("en-IN")} kg, starting at the warehouse.</span>`)+estimateHtml(ce)}</td></tr>`+
-      t.rows.map(({s,o})=>`<tr><td class="mono" style="padding-left:24px">${esc(s.awb)}</td><td></td><td></td><td>${o.charged_kg??"—"} kg</td><td></td><td></td><td></td><td></td><td class="muted">${s.reason!==t.rows[0].s.reason?esc(s.reason):""}</td></tr>`).join("")}).join("")
-    ||'<tr><td colspan="9" class="muted">No parcels are waiting for a truck.</td></tr>';
+      `<tr class="estrow"><td colspan="11">${!ce?'<span class="muted">Estimating cost…</span>':ce.error?`<span class="tag bad">Estimate failed</span> ${esc(ce.error)}`:(t.truck?"":`<span class="muted">No truck yet: estimated for a ${CLASS_INFO[DEFAULT_CLASS][0]}, ${CLASS_INFO[DEFAULT_CLASS][1].toLocaleString("en-IN")} kg, starting at the warehouse.</span>`)+estimateHtml(ce)}</td></tr>`+
+      `<tr><td colspan="11"><button class="btn ghost" type="button" data-parcels="${esc(ek)}">${S.openTrips.has(ek)?"Hide":"Show"} the ${t.rows.length} parcel${t.rows.length>1?"s":""}</button></td></tr>`+
+      (S.openTrips.has(ek)?t.rows.map(({s,o})=>`<tr><td class="mono" style="padding-left:24px">${esc(s.awb)}</td><td></td><td></td><td>${o.charged_kg!=null?kgFmt(o.charged_kg):"—"} kg</td><td colspan="6"></td><td class="muted">${s.reason!==t.rows[0].s.reason?esc(s.reason):""}</td></tr>`).join(""):"")}).join("")
+    ||'<tr><td colspan="11" class="muted">No parcels are waiting for a truck.</td></tr>';
   if(!map)return; layer.clearLayers(); const pts=[];
   const waiting={};S.orders.filter(o=>["booked","in_transit"].includes(o.status)&&!o.truck_no).forEach(o=>{if(o.cur_wh)waiting[o.cur_wh]=(waiting[o.cur_wh]||0)+1});
   // Suggestion lines: truck to origin warehouse
@@ -385,7 +387,8 @@ $("dArea").addEventListener("change",e=>{if(!map)return;const v=e.target.value;
 $("dSuggest").addEventListener("click",loadSuggest);
 $("dKm").addEventListener("change",loadSuggest);$("dFresh").addEventListener("change",loadSuggest);
 // estimate key: the same truck, leg and parcels
-S.est=new Map();
+S.est=new Map();S.openTrips=new Set();
+$("dBody").addEventListener("click",e=>{const b=e.target.closest("[data-parcels]");if(!b)return;const k=b.dataset.parcels;S.openTrips.has(k)?S.openTrips.delete(k):S.openTrips.add(k);renderDispatch()});
 function estKey(t){return [t.truck,t.from,t.to,t.rows.map(r=>r.s.awb).sort().join(",")].join("|")}
 const DEFAULT_CLASS="upto_3_axle";
 async function estimateTrip(t){const tr=S.trucks.find(x=>x.truck_no===t.truck)||{};
@@ -620,7 +623,7 @@ async function simEstimate(){
     const legs=[];for(let i=0;i<route.length-1;i++)legs.push(await estimateLeg(route[i],route[i+1],cls,cap,pick.map(o=>o.awb),0));
     if(run!==SIM.estRun)return;SIM.est=legs;
     const sum=f=>legs.reduce((a,e)=>a+(+e[f]||0),0),warn=legs.flatMap((e,i)=>(e.warnings||[]).map(w=>`Leg ${i+1}: ${w}`));
-    $("sResult").innerHTML=`<p style="margin:0 0 6px"><b>Estimate before the trip</b> <span class="muted">(${pick.length} parcels, ${Math.round(pick.reduce((a,o)=>a+ +o.charged_kg,0))} kg)</span></p>
+    $("sResult").innerHTML=`<p style="margin:0 0 6px"><b>Estimate before the trip</b> <span class="muted">(${pick.length} parcels, ${kgFmt(pick.reduce((a,o)=>a+ +o.charged_kg,0))} kg)</span></p>
       <div class="tw" style="max-height:none"><table style="min-width:560px"><thead><tr><th>Leg</th><th>Km (loaded + empty)</th><th>Hours</th><th>Fuel</th><th>Tolls</th><th>Maint.</th><th>Driver</th><th>Cost</th><th>Profit</th></tr></thead><tbody>
       ${legs.map((e,i)=>`<tr><td>${i+1}. ${esc(whName(e.from))} → ${esc(whName(e.to))}</td><td>${e.km_loaded} + ${e.km_empty}</td><td>${e.hours}</td><td>${inr(e.fuel)}</td><td>${inr(e.tolls)}</td><td>${inr(e.maintenance)}</td><td>${inr(e.driver)}</td><td>${inr(e.cost)}</td><td>${money(+e.profit)}</td></tr>`).join("")}
       <tr class="trip"><td>Total</td><td>${Math.round(sum("km_loaded"))} + ${Math.round(sum("km_empty"))}</td><td>${sum("hours").toFixed(1)}</td><td>${inr(sum("fuel"))}</td><td>${inr(sum("tolls"))}</td><td>${inr(sum("maintenance"))}</td><td>${inr(sum("driver"))}</td><td>${inr(sum("cost"))}</td><td>${money(sum("profit"))}</td></tr></tbody></table></div>
@@ -701,7 +704,7 @@ $("sStart").addEventListener("click",async()=>{
     const all=legs.flatMap(l=>l.road.coords),lats=all.map(c=>c[0]),lons=all.map(c=>c[1]);
     const {data:plz}=await sb.from("toll_plazas").select("id,name,lat,lon,rate_"+cls).gte("lat",Math.min(...lats)-0.05).lte("lat",Math.max(...lats)+0.05).gte("lon",Math.min(...lons)-0.05).lte("lon",Math.max(...lons)+0.05).limit(2000).then(r=>r,()=>({data:[]}));
     SIM.plazaMarks=new Map();(plz||[]).forEach(p=>SIM.plazaMarks.set(p.id,L.circleMarker([p.lat,p.lon],{radius:3,color:"#A16207",weight:1,fillColor:"#FDE68A",fillOpacity:1}).bindTooltip(`${esc(p.name)} · NHAI fee ₹${p["rate_"+cls]??"?"}`).addTo(SIM.layer)));
-    simLog(t0,`Relay of ${n} parcels (${kg} kg) over ${legs.length} legs: ${route.map(whName).join(" → ")}. Replays in 5 minutes.`);
+    simLog(t0,`Relay of ${n} parcels (${kgFmt(kg)} kg) over ${legs.length} legs: ${route.map(whName).join(" → ")}. Replays in 5 minutes.`);
     SIM.legs=legs;SIM.pick=pick;
     await runSim(ev,{t0,simMs,legs,cls,cap,kmLoaded:0,kmEmpty:0,last:new Map(),tollSeen:new Set(),tolls:0,legsDone:0});
     if(!SIM.stop)await simResult(legs);
