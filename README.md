@@ -133,6 +133,7 @@ Run once each in the Supabase SQL Editor, if your database is older than the fea
 10. `supabase/migration_009_expressway_estimate.sql` (closed-loop expressway tolls, cost estimate before a trip; safe to run again)
 11. `supabase/migration_010_dispatch_real_trucks.sql` (dispatch reasons never name simulated trucks; safe to run again)
 12. `supabase/migration_011_return_loads.sql` (return loads; safe to run again)
+13. `supabase/migration_012_network_gaps.sql` (fills hub network gaps, re-routes waiting parcels; safe to run again)
 
 ## Warehouse page (loading and unloading by scan)
 `warehouse.html`, e.g. https://sahilrathour007.github.io/dakbox-ops/warehouse.html
@@ -189,6 +190,7 @@ It downloads every plaza's location and fee table from NHAI, matches them to `da
 A driver may work 8 hours a day and must rest after 5 hours (Motor Transport Workers Act 1961, s.13 and s.15; Motor Vehicles Act 1988, s.91). At highway speeds that is about 400 to 500 km, so parcels travel hub to hub:
 - Each warehouse is a **hub** (`is_hub = true`) or a **spoke**. A spoke connects only to its nearest hub. Okhla, Noida, Navi Mumbai and Kanpur are spokes.
 - 16 **relay hubs** were added on the national highway corridors (Udaipur, Surat, Indore, Nagpur, Agra, Varanasi, Gaya, Dhanbad, Vijayawada, Nellore, Solapur, Kurnool, Hubballi, Chitradurga, Raipur, Bhubaneswar). Their positions are approximate: check them and correct them in Table Editor, warehouses.
+- Links allowed: a spoke to its nearest hub, hub to hub up to `max_leg_km`, and any two warehouses within `settings.local_link_km` (60 road km). Kanpur is a hub; relay hubs at Jhansi, Bhopal, Adilabad, Berhampur and Visakhapatnam close the gaps in central India and on the east coast (migration 012). Routes are on average 9% longer than the direct road (worst 1.3x).
 - When a parcel is booked, `plan_route` picks the shortest chain of warehouses where every hub-to-hub leg is at most `settings.max_leg_km` (500) road km (straight km × `road_factor`). Example: Okhla → Gurugram → Jaipur → Udaipur → Ahmedabad → Surat → Bhiwandi → Navi Mumbai.
 - Dispatch, scanning and the driver page work **one leg at a time** (`orders.cur_wh` → `orders.next_wh`). When a parcel is unloaded at a middle hub, it becomes "In transit" there and waits for the truck of its next leg.
 - Every leg is recorded in `parcel_legs`. The Money tab shows each leg as its own trip. Revenue is split across the legs by distance; each leg is costed with exactly the same formulas as before (GPS km including the empty return, NHAI tolls, IndianOil diesel, assumed maintenance, driver pay).
