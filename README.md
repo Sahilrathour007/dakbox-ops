@@ -135,6 +135,7 @@ Run once each in the Supabase SQL Editor, if your database is older than the fea
 12. `supabase/migration_011_return_loads.sql` (return loads; safe to run again)
 13. `supabase/migration_012_network_gaps.sql` (fills hub network gaps, re-routes waiting parcels; safe to run again)
 14. `supabase/migration_013_auto_dispatch_returns.sql` (automatic dispatch, widening truck search, return trips with a stop; safe to run again)
+15. `supabase/migration_014_bug_fixes.sql` (Orders tab status change frees the parcel; simulator parcels stay out of real dispatch; safe to run again)
 
 ## Warehouse page (loading and unloading by scan)
 `warehouse.html`, e.g. https://sahilrathour007.github.io/dakbox-ops/warehouse.html
