@@ -101,7 +101,7 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
 <header class="top"><div class="in">
   <span class="brand">Dakbox<small>Operations</small></span>
   <nav class="tabs" id="tabs">
-    <button data-v="orders" class="on">Orders</button><button data-v="dispatch">Dispatch</button><button data-v="trucks">Trucks</button><button data-v="times">Loading times</button><button data-v="money">Money</button><button data-v="returns">Return loads <span id="retCount"></span></button><button data-v="flags">Flags <span id="flagCount"></span></button><button data-v="sim">Simulator</button>
+    <button data-v="orders" class="on">Orders</button><button data-v="dispatch">Dispatch</button><button data-v="trucks">Trucks</button><button data-v="times">Loading times</button><button data-v="money">Money</button><button data-v="leaks">Leaks</button><button data-v="returns">Return loads <span id="retCount"></span></button><button data-v="flags">Flags <span id="flagCount"></span></button><button data-v="sim">Simulator</button>
   </nav>
   <div class="who"><span id="whoEmail"></span><button class="btn ghost" id="logout" type="button">Sign out</button></div>
 </div></header>
@@ -201,6 +201,19 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
   </section>
 
   <!-- FLAGS -->
+  <section id="v-leaks" hidden style="display:flex;flex-direction:column;gap:14px">
+    <p class="muted" style="margin:0">Where money leaks, biggest first. Each leak is a measured quantity (GPS km, scanned kg, hours, bills) times a rupee rate. Rates marked ASSUMED are varied 50% to 150%: if a leak keeps its rank at both ends, you can act on it even without exact costs. The leaks do not overlap.</p>
+    <div class="bar">
+      <label>Period<select id="lDays"><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option></select></label>
+      <label><input type="checkbox" id="lSim"> Include simulations</label>
+      <label>Fixed cost per truck-day (₹) <span class="est">ASSUMED</span><input id="lFixed" type="number" min="0" step="100" style="width:110px"></label>
+    </div>
+    <div class="stats" id="lStats"></div>
+    <div class="tw"><table style="min-width:980px">
+      <thead><tr><th>#</th><th>Leak</th><th>₹ likely</th><th>Range (low – high)</th><th>Rank holds?</th><th>Measured</th><th>How it is worked out</th><th>What fixes it</th></tr></thead>
+      <tbody id="lBody"><tr><td colspan="8" class="muted">Loading…</td></tr></tbody></table></div>
+  </section>
+
   <section id="v-returns" hidden style="display:flex;flex-direction:column;gap:14px">
     <p class="muted" style="margin:0">Every truck that has delivered drives home anyway. The system compares going home directly with going home via one more warehouse (at most <span id="rDetour">25</span>% extra km) and offers the plan that earns most. Parcels waiting at that warehouse whose next leg goes to the truck's home can ride along. When the last parcel is scanned off, the system offers them to the driver automatically; you can also offer them here. <b>Extra cost</b> = diesel loaded instead of empty + driver trip pay. <b>Own truck</b> = sending the same parcels on a separate truck, there and back (tolls not included).</p>
     <div class="stats" id="rStats"></div>
@@ -313,7 +326,8 @@ async function start(session){
 // ---------- tabs
 $("tabs").addEventListener("click",e=>{const v=e.target.dataset.v;if(!v)return;S.view=v;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));
-  ["orders","dispatch","trucks","times","money","returns","flags","sim"].forEach(x=>$("v-"+x).hidden=x!==v);
+  ["orders","dispatch","trucks","times","money","leaks","returns","flags","sim"].forEach(x=>$("v-"+x).hidden=x!==v);
+  if(v==="leaks")loadLeaks();
   if(v==="returns")loadReturns();
   if(v==="times")loadTimes();
   if(v==="money")loadMoney();
@@ -570,6 +584,29 @@ $("mBody").addEventListener("click",async e=>{if(!e.target.matches("[data-costs]
 
 // ---------- flags
 const RULE_NAME={R2:"GPS",R3:"Scans",R5:"Waiting reason",R6:"Real costs",R8:"Truck earns its share",R10:"Manual changes",R11:"Gaming check",R12:"Every order placed",R13:"Driver hours",R15:"Expressway tolls"};
+// ---------- leak board: money lost, ranked; ranks re-checked with assumed rates at 50% and 150%
+async function loadLeaks(){
+  $("lFixed").value=S.settings?.fixed_cost_per_day??"";
+  const {data,error}=await sb.rpc("leak_board",{p_days:+$("lDays").value,p_include_sim:$("lSim").checked});
+  if(error){$("lBody").innerHTML=`<tr><td colspan="8" class="muted">${/leak_board/.test(error.message)?"Run supabase/migration_015_leak_board.sql in Supabase first.":esc(error.message)}</td></tr>`;return}
+  const rows=(data||[]).filter(r=>+r.amount>0),rank=f=>new Map([...rows].sort((a,b)=>b[f]-a[f]).map((r,i)=>[r.code,i]));
+  const lo=rank("amount_low"),hi=rank("amount_high"),total=rows.reduce((a,r)=>a+ +r.amount,0),days=+$("lDays").value;
+  $("lStats").innerHTML=`<div class="stat"><span class="muted">Money leaking, ${days} days</span><b>${inr(total)}</b></div>
+    <div class="stat"><span class="muted">Per month at this rate</span><b>${inr(Math.round(total/days*30))}</b></div>
+    <div class="stat"><span class="muted">Biggest leak</span><b style="font-size:16px">${rows[0]?esc(rows[0].leak):"—"}</b><span class="muted">${rows[0]&&total?Math.round(rows[0].amount/total*100)+"% of all leaks":""}</span></div>`;
+  $("lBody").innerHTML=rows.map((r,i)=>{const holds=lo.get(r.code)===i&&hi.get(r.code)===i;
+    return `<tr><td><b>${i+1}</b></td><td><b>${esc(r.leak)}</b><div class="muted" style="font-size:12px">${esc(r.quantity)}</div></td>
+      <td><b>${inr(r.amount)}</b><div class="muted" style="font-size:12px">${total?Math.round(r.amount/total*100):0}% of leaks</div></td>
+      <td>${inr(r.amount_low)} – ${inr(r.amount_high)}</td>
+      <td>${holds?'<span class="tag ok">Yes</span>':`<span class="tag warn">Rank ${lo.get(r.code)+1}–${hi.get(r.code)+1}</span>`}</td>
+      <td style="font-size:12px">${esc(r.basis).replace("ASSUMED",'<span class="est">ASSUMED</span>')}</td>
+      <td class="muted" style="font-size:12px">${esc(r.formula)}</td><td style="font-size:12px">${esc(r.fix)}</td></tr>`}).join("")
+    ||`<tr><td colspan="8" class="muted">No leaks found in this period${$("lSim").checked?"":" (simulations excluded: tick Include simulations to see test trips)"}.</td></tr>`;
+}
+$("lDays").addEventListener("change",loadLeaks);$("lSim").addEventListener("change",loadLeaks);
+$("lFixed").addEventListener("change",async e=>{const v=Math.max(0,+e.target.value||0);
+  const {error}=await sb.from("settings").update({fixed_cost_per_day:v}).eq("id",1);toast(error?error.message:"Fixed cost per truck-day saved: ₹"+v);await loadSettings();loadLeaks()});
+
 // ---------- return loads (backhaul)
 async function loadReturns(){
   const {data,error}=await sb.rpc("return_load_matches");

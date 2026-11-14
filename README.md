@@ -135,7 +135,7 @@ Run once each in the Supabase SQL Editor, if your database is older than the fea
 12. `supabase/migration_011_return_loads.sql` (return loads; safe to run again)
 13. `supabase/migration_012_network_gaps.sql` (fills hub network gaps, re-routes waiting parcels; safe to run again)
 14. `supabase/migration_013_auto_dispatch_returns.sql` (automatic dispatch, widening truck search, return trips with a stop; safe to run again)
-15. `supabase/migration_014_bug_fixes.sql` (Orders tab status change frees the parcel; simulator parcels stay out of real dispatch; safe to run again)
+N. `supabase/migration_015_leak_board.sql` (Leaks tab: where money leaks, ranked in rupees; safe to run again)
 
 ## Warehouse page (loading and unloading by scan)
 `warehouse.html`, e.g. https://sahilrathour007.github.io/dakbox-ops/warehouse.html
@@ -240,3 +240,14 @@ When a truck unloads away from home, the system compares going home directly wit
 - **Driver page:** while driving out, a forecast of the way home; after unloading, the return load card with every stop, km and pay, and how long is left to answer.
 - **Ops, Return loads tab:** each truck's plan (direct or via a warehouse), parcels, revenue, diesel, maintenance, driver, extra cost and gain vs an empty return, plus the other ways it compared.
 - **Money:** each stop is its own trip; a return load ends when the truck is back home, so every km is counted once.
+
+## Leaks tab: what to fix first
+Money lost in the period, biggest first, in rupees. Each leak is a measured quantity times a rupee rate, and the leaks do not overlap:
+1. **Paying for empty space**: cost of each loaded drive x share of the truck left empty.
+2. **Driving empty**: empty km x (diesel + maintenance per km).
+3. **Trucks standing idle**: hours not on a trip x fixed cost per truck-day / 24.
+4. **Waiting at warehouses**: waiting hours x fixed cost per truck-day / 24.
+5. **Detours**: km beyond the road distance between the warehouses (GPS trips).
+6. **Diesel bills above expected**: bills entered vs km x official diesel price.
+7. **Lanes that lose even when full**: cost minus revenue if the truck had been full.
+Diesel and tolls are official; GPS, scans and bills are measured; maintenance per km and **fixed cost per truck-day** (`settings.fixed_cost_per_day`, default Rs 4,000, set it on the tab) are assumed. Assumed rates are varied 50% to 150%: "Rank holds? Yes" means the leak keeps its place either way, so it can be acted on before the costs are exact.
