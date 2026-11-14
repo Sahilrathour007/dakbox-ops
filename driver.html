@@ -31,6 +31,8 @@ input,select{font:17px -apple-system,system-ui,sans-serif;color:var(--ink);backg
 .earn b{font-size:28px;color:var(--gold);font-variant-numeric:tabular-nums}
 .job.offer{border-color:var(--gold);box-shadow:0 0 0 2px rgba(251,191,36,.25)}
 .job.back{border-color:#16A34A;box-shadow:0 0 0 3px rgba(22,163,74,.3)}
+.timer{margin:0 0 6px;color:#B45309;font-weight:600}
+.plan{margin:8px 0;padding:8px 10px;border-radius:8px;background:rgba(22,163,74,.08);line-height:1.6}
 .backnote{margin:0 0 8px;padding:8px 10px;border-radius:8px;background:#DCFCE7;color:#14532D;font-weight:600}
 .area{font-size:26px;font-weight:800;line-height:1.15}
 .pay{font-size:40px;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums}
@@ -168,6 +170,10 @@ async function loadJobs(){
   try{[S.jobs,S.legsDone,S.backLegs]=await Promise.all([q(sb.from("orders").select("*").eq("truck_no",S.truck)),
     q(sb.from("parcel_legs").select("awb,from_wh,to_wh,driver_pay,unloaded_at").eq("truck_no",S.truck).gte("unloaded_at",today.toISOString())),
     q(sb.from("parcel_legs").select("awb").eq("truck_no",S.truck).eq("backhaul",true).is("unloaded_at",null))])}catch(e){return}
+  // the return plan: the one offered (with its stops), or a preview of the way home while driving out
+  S.plan=null;try{const pl=await q(sb.from("return_plans").select("plan,created_at").eq("truck_no",S.truck).order("created_at",{ascending:false}).limit(1));S.plan=pl&&pl[0]?pl[0].plan:null}catch(e){}
+  S.preview=null;if((S.jobs||[]).some(o=>["driver_accepted","picked_up"].includes(o.status)&&!(S.backLegs||[]).some(l=>l.awb===o.awb))){try{const r=await sb.rpc("plan_return",{p_truck:S.truck});S.preview=r.data||null}catch(e){}}
+  if(!S.settings){try{const st=await q(sb.from("settings").select("offer_timeout_min").eq("id",1));S.settings=st[0]||{}}catch(e){S.settings={}}}
   // a new return load: buzz and show the alert once
   S.backhaul=new Set((S.backLegs||[]).map(l=>l.awb));
   const newOffers=(S.jobs||[]).filter(o=>o.status==="pickup_assigned"&&S.backhaul.has(o.awb)&&!(S.alerted||new Set()).has(o.awb));
@@ -208,11 +214,18 @@ function renderJobs(){
     </div>`});
   group(jobs.filter(o=>o.status==="pickup_assigned")).forEach(t=>{
     const tk=tripKm(t),back=t.rows.some(o=>(S.backhaul||new Set()).has(o.awb));
-    h+=`<div class="card job offer${back?" back":""}">${back?`<p class="backnote">Return load: parcels going your way home. Your truck drives back anyway, so this is extra pay.</p>`:""}<h2>${back?"Return load":"New trip"}</h2>
+    const left=S.settings&&S.settings.offer_timeout_min?Math.max(0,Math.ceil((Date.parse(t.rows[0].assigned_at)+S.settings.offer_timeout_min*60000-Date.now())/60000)):null;
+    const pb=back&&S.plan&&S.plan.best;
+    h+=`<div class="card job offer${back?" back":""}">${back?`<p class="backnote">Return load: parcels going your way home. Your truck drives back anyway, so this is extra pay.</p>`:""}<h2>${back?"Return load":"New trip"}</h2>${left!=null?`<p class="timer">Answer within ${left} min, or it goes to another truck</p>`:""}
       <div class="pay">${inr(sum(t.rows,"driver_pay"))}</div>
       <div class="area">${esc(name(t.from))} → ${esc(name(t.to))}</div>
       <div class="facts">${away(t.from)!=null?`<span><b>${fmtKm(away(t.from))}</b> to pickup</span>`:""}${tk!=null?`<span><b>${fmtKm(tk)}</b> trip</span>`:""}<span>${t.rows.length} parcel${t.rows.length>1?"s":""}, ${sum(t.rows,"charged_kg")} kg</span></div>
+      ${pb?`<div class="plan"><b>Your way home</b>${pb.stops.map((s,i)=>`<div>${i+1}. ${esc(s.from_name)} → ${esc(s.to_name)}: ${s.parcels?`${s.parcels} parcel${s.parcels>1?"s":""}, ${s.km} km, pay ${inr(s.driver)}`:`empty, ${s.km} km`}${i?" <span class=\"muted\">(offered when you unload at stop "+i+")</span>":""}</div>`).join("")}<div class="muted">Whole way home: ${pb.km} km${pb.extra_km>0?` (+${pb.extra_km} km detour)`:""}, your pay ${inr(pb.driver)}</div></div>`:""}
       ${btn("accept",t,back?"Accept return load":"Accept trip")}${btn("decline",t,"Decline","btn text")}</div>`});
+  const pv=S.preview&&S.preview.best;
+  if(pv)h+=`<div class="card job"><h2>On your way back (forecast)</h2><div class="area">${esc(S.preview.at_name)} → ${esc(S.preview.home_name)}</div>
+    ${pv.stops.map((s,i)=>`<p class="addr">${i+1}. ${esc(s.from_name)} → ${esc(s.to_name)}: ${s.parcels?`${s.parcels} parcel${s.parcels>1?"s":""} waiting, pay about ${inr(s.driver)}`:`empty, ${s.km} km`}</p>`).join("")}
+    <p class="muted">Offered automatically when you unload. Parcels may be taken by another truck before then.</p></div>`;
   if(!h)h=S.online
     ?`<div class="card empty"><p><b>No trips right now</b></p><p class="muted">Stay online. New trips from warehouses near you appear here.</p></div>`
     :`<div class="card empty"><p><b>You're offline</b></p><p class="muted">Go online to start getting trips.</p><button class="btn" type="button" onclick="goOnline()">Go online</button></div>`;

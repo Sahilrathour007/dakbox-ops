@@ -58,6 +58,7 @@ end $$;
 -- Every real truck between its outward trip and home: the return trip and what could ride on it.
 -- extra_cost = what carrying the load home adds (diesel loaded instead of empty, driver trip pay);
 -- own_truck_cost = sending the same parcels on a separate truck (there and back; tolls not included).
+drop function if exists public.return_load_matches();
 create or replace function public.return_load_matches()
 returns table (truck_no text, driver_name text, driver_phone text, stage text, at_wh text, home_wh text,
                at_name text, home_name text, free_kg numeric, waiting_parcels int, waiting_kg numeric,

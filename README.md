@@ -134,6 +134,7 @@ Run once each in the Supabase SQL Editor, if your database is older than the fea
 11. `supabase/migration_010_dispatch_real_trucks.sql` (dispatch reasons never name simulated trucks; safe to run again)
 12. `supabase/migration_011_return_loads.sql` (return loads; safe to run again)
 13. `supabase/migration_012_network_gaps.sql` (fills hub network gaps, re-routes waiting parcels; safe to run again)
+14. `supabase/migration_013_auto_dispatch_returns.sql` (automatic dispatch, widening truck search, return trips with a stop; safe to run again)
 
 ## Warehouse page (loading and unloading by scan)
 `warehouse.html`, e.g. https://sahilrathour007.github.io/dakbox-ops/warehouse.html
@@ -226,3 +227,15 @@ A truck that has delivered drives home anyway. Parcels waiting at that warehouse
 - **Driver page:** the offer appears as a green **Return load** card (the phone vibrates); the driver accepts or declines. Loading and unloading are scanned as usual.
 - **Ops → Return loads tab:** every real truck from dispatch until it is back home, its return trip, the parcels waiting on that lane, what fits, revenue, **extra cost** (diesel loaded instead of empty + driver trip pay), **own truck** cost (the same parcels on a separate truck, there and back, tolls not included), and the status. "Offer to driver" offers them by hand (e.g. after a decline).
 - **Money:** a trip now ends when the truck starts its next job, so the drive home is counted once: on the return load if there is one, otherwise on the trip itself as before. Trips without a return load cost exactly what they did.
+
+## Automatic dispatch (like a ride app)
+- **Search:** the nearest free truck within 25 km, else 50, 100, 150 km (`settings.search_rings_km`, capped by Max distance). The Why column says how far the search went.
+- **Offers expire:** a driver has `settings.offer_timeout_min` (10) minutes to accept. No answer, or a decline, and the offer goes to the next truck; that truck is not offered the same parcel again for 12 hours (`offer_log`).
+- **Automatic:** `auto_dispatch()` expires unanswered offers and sends every trip that is ready under the fill rule. It runs every minute in the database with pg_cron (enable it in Supabase: Database, Extensions, pg_cron, then run migration 013 again). While the ops page is open it also runs from there. Switch it on or off in Dispatch.
+- The fill rule still applies: a trip is sent when the truck is `min_fill_pct` full or the oldest parcel has waited `max_wait_hours`. "Send now" still works for early trips.
+
+## Return trips with a stop
+When a truck unloads away from home, the system compares going home directly with going home via one more warehouse that adds at most `settings.return_max_detour_pct` (25%) km. Each option is costed against driving home empty: extra diesel, maintenance and driver pay (same formulas as the Money tab; tolls not included). The option that earns most is offered: the first stop now, the next when the truck unloads there. A detour is only chosen if it earns more than driving home empty.
+- **Driver page:** while driving out, a forecast of the way home; after unloading, the return load card with every stop, km and pay, and how long is left to answer.
+- **Ops, Return loads tab:** each truck's plan (direct or via a warehouse), parcels, revenue, diesel, maintenance, driver, extra cost and gain vs an empty return, plus the other ways it compared.
+- **Money:** each stop is its own trip; a return load ends when the truck is back home, so every km is counted once.

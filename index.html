@@ -59,6 +59,9 @@ td select{padding:4px 6px;font-size:13px}
 .estbox{padding:8px 4px;line-height:1.7;font-size:13px}
 .estbox .tag{margin-right:4px}
 tr.estrow td{background:var(--surface-2,#F6F7FB)}
+.autobar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line,#E3E6EC);border-radius:10px;background:var(--surface,#fff)}
+.autobar .switch{display:flex;align-items:center;gap:6px}
+.plan-opt{font-size:12px;color:var(--muted,#667085)}
 .wh-pin em{font-style:normal;background:#F2A516;color:#1A1405;font:700 11px var(--f-body);padding:1px 6px;border-radius:999px}
 .trip td{background:#F6F2FB;font-weight:600}
 .tag.wh{background:#FAE8FF;color:#86198F}
@@ -128,6 +131,9 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
       <button class="btn ghost" id="dSave" type="button">Save as default</button>
       <label>Zoom to<select id="dArea"><option value="">Everything</option><option value="trucks">Trucks with live GPS</option><option value="28.60,77.15,11">Delhi NCR</option><option value="19.08,72.90,11">Mumbai</option><option value="18.52,73.86,12">Pune</option><option value="12.97,77.59,11">Bengaluru</option></select></label>
     </div>
+    <div class="autobar"><label class="switch"><input type="checkbox" id="dAuto"> <b>Automatic dispatch</b></label>
+      <span class="muted" id="dAutoNote">Every minute: unanswered offers expire after the time limit and go to the next truck; trips ready under the fill rule are sent to drivers.</span>
+      <label>Offer expires after (min)<input id="dTimeout" type="number" min="2" max="120" style="width:80px"></label></div>
     <div class="stats" id="dStats"></div>
     <div class="banner" id="whNote" hidden></div>
     <div id="dmap"></div>
@@ -196,10 +202,10 @@ pre{background:#F6F7F9;border:1px solid var(--line);border-radius:6px;padding:12
 
   <!-- FLAGS -->
   <section id="v-returns" hidden style="display:flex;flex-direction:column;gap:14px">
-    <p class="muted" style="margin:0">Every truck that has delivered drives home anyway. Parcels waiting at that warehouse whose next leg goes to the truck's home can ride along. When the last parcel is scanned off, the system offers them to the driver automatically; you can also offer them here. <b>Extra cost</b> = diesel loaded instead of empty + driver trip pay. <b>Own truck</b> = sending the same parcels on a separate truck, there and back (tolls not included).</p>
+    <p class="muted" style="margin:0">Every truck that has delivered drives home anyway. The system compares going home directly with going home via one more warehouse (at most <span id="rDetour">25</span>% extra km) and offers the plan that earns most. Parcels waiting at that warehouse whose next leg goes to the truck's home can ride along. When the last parcel is scanned off, the system offers them to the driver automatically; you can also offer them here. <b>Extra cost</b> = diesel loaded instead of empty + driver trip pay. <b>Own truck</b> = sending the same parcels on a separate truck, there and back (tolls not included).</p>
     <div class="stats" id="rStats"></div>
     <div class="tw"><table style="min-width:980px">
-      <thead><tr><th>Truck</th><th>Now</th><th>Return trip</th><th>Space free</th><th>Waiting on this lane</th><th>Fits</th><th>Revenue</th><th>Extra cost</th><th>Own truck</th><th>Gain vs empty return</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Truck</th><th>Now</th><th>Best way home</th><th>Parcels</th><th>Revenue</th><th>Diesel</th><th>Maint.</th><th>Driver</th><th>Extra cost vs empty</th><th>Gain vs empty return</th><th>Status</th><th></th></tr></thead>
       <tbody id="rBody"><tr><td colspan="12" class="muted">Loading…</td></tr></tbody></table></div>
   </section>
 
@@ -272,7 +278,16 @@ $("logout").addEventListener("click",()=>sb.auth.signOut());
 async function loadOrders(){const {data,error}=await sb.from("orders").select("*").order("created_at",{ascending:false}).limit(500);if(!error){S.orders=data;renderOrders();renderTrucks();}}
 async function loadWarehouses(){const {data,error}=await sb.from("warehouses").select("*").order("code");if(error){S.wh=[];$("whNote").hidden=false;$("whNote").textContent="Warehouses are not set up in the database yet. In Supabase, SQL Editor, run supabase/migration_003_warehouses.sql, then reload this page.";return}if(!error){S.wh=data;$("whNote").hidden=data.length>0;$("whNote").textContent="No warehouses in the database yet. Add them in Supabase (table: warehouses).";renderTrucks();if(S.view==="dispatch")renderDispatch()}}
 async function loadTrucks(){const {data,error}=await sb.from("trucks").select("*").eq("is_simulated",false).order("truck_no");if(!error){S.trucks=data;renderTrucks();}}
-async function loadSettings(){const {data}=await sb.from("settings").select("*").eq("id",1).maybeSingle();if(data)S.settings=data;$("dKm").value=S.settings.max_distance_km;$("dFresh").value=S.settings.gps_fresh_minutes}
+async function loadSettings(){const {data}=await sb.from("settings").select("*").eq("id",1).maybeSingle();if(data)S.settings=data;$("dKm").value=S.settings.max_distance_km;$("dFresh").value=S.settings.gps_fresh_minutes;renderAuto()}
+function renderAuto(){const st=S.settings||{};if(st.auto_dispatch===undefined){$("dAuto").disabled=true;$("dAutoNote").textContent="Run supabase/migration_013_auto_dispatch_returns.sql to turn on automatic dispatch.";return}
+  $("dAuto").checked=!!st.auto_dispatch;$("dTimeout").value=st.offer_timeout_min??10;
+  $("dAutoNote").textContent=(st.auto_dispatch?"ON. ":"OFF: trips go out only when you click Send. ")+"Unanswered offers expire after "+(st.offer_timeout_min??10)+" min and go to the next truck. Truck search: "+(st.search_rings_km||[25,50,100,150]).filter(r=>r<=+st.max_distance_km).concat(+st.max_distance_km).filter((v,i,a)=>a.indexOf(v)===i).join(" → ")+" km."+(st.last_auto_dispatch_at?" Last run "+ago(st.last_auto_dispatch_at)+".":"")}
+$("dAuto").addEventListener("change",async e=>{const {error}=await sb.from("settings").update({auto_dispatch:e.target.checked}).eq("id",1);toast(error?error.message:"Automatic dispatch "+(e.target.checked?"on":"off"));await loadSettings();if(e.target.checked)runAuto()});
+$("dTimeout").addEventListener("change",async e=>{const v=Math.max(2,Math.min(120,+e.target.value||10));const {error}=await sb.from("settings").update({offer_timeout_min:v}).eq("id",1);toast(error?error.message:"Offers now expire after "+v+" min");loadSettings()});
+// the database runs dispatch every minute (pg_cron); this page also runs it while open, in case pg_cron is off
+async function runAuto(){if(!S.settings?.auto_dispatch)return;const {data,error}=await sb.rpc("auto_dispatch");if(error)return;
+  if(data&&(data.sent||data.expired)){toast(`Automatic dispatch: ${data.sent} parcel${data.sent===1?"":"s"} sent${data.expired?`, ${data.expired} offer${data.expired===1?"":"s"} expired`:""}`);await Promise.all([loadOrders(),loadTrucks()]);if(S.view==="dispatch")loadSuggest()}
+  loadSettings()}
 async function loadSuggest(){
   const {data,error}=await sb.rpc("suggest_allocations",{p_max_km:+$("dKm").value||null,p_fresh_min:+$("dFresh").value||null});
   if(error){toast(error.message);return}
@@ -292,6 +307,7 @@ async function start(session){
   sb.channel("ops").on("postgres_changes",{event:"*",schema:"public",table:"orders"},()=>{clearTimeout(t1);t1=setTimeout(async()=>{await loadOrders();if(S.view==="dispatch")loadSuggest();loadReturns()},400)})
     .on("postgres_changes",{event:"*",schema:"public",table:"trucks"},()=>{clearTimeout(t2);t2=setTimeout(async()=>{await loadTrucks();if(S.view==="dispatch")loadSuggest()},400)}).subscribe();
   setInterval(()=>{renderTrucks();if(S.view==="dispatch")loadSuggest()},60000); // GPS age moves on
+  setInterval(runAuto,60000);setTimeout(runAuto,3000);
 }
 
 // ---------- tabs
@@ -557,25 +573,27 @@ const RULE_NAME={R2:"GPS",R3:"Scans",R5:"Waiting reason",R6:"Real costs",R8:"Tru
 // ---------- return loads (backhaul)
 async function loadReturns(){
   const {data,error}=await sb.rpc("return_load_matches");
-  if(error){$("rBody").innerHTML=`<tr><td colspan="12" class="muted">${/return_load_matches/.test(error.message)?"Run supabase/migration_011_return_loads.sql in Supabase first.":esc(error.message)}</td></tr>`;return}
-  const rows=data||[];S.returns=rows;
-  const open=rows.filter(r=>r.fit_parcels>0&&!r.offered&&!r.accepted).length;
+  if(error){$("rBody").innerHTML=`<tr><td colspan="12" class="muted">${/return_load_matches|plan/.test(error.message)?"Run supabase/migration_013_auto_dispatch_returns.sql in Supabase first.":esc(error.message)}</td></tr>`;return}
+  const rows=data||[];S.returns=rows;$("rDetour").textContent=S.settings?.return_max_detour_pct??25;
+  const best=r=>r.plan&&r.plan.best;
+  const open=rows.filter(r=>best(r)&&!r.offered&&!r.accepted).length;
   $("retCount").textContent=open?String(open):"";$("retCount").className=open?"tag warn":"";
   $("rStats").innerHTML=`<div class="stat"><span class="muted">Trucks heading home</span><b>${rows.length}</b></div>
-    <div class="stat"><span class="muted">With parcels that fit</span><b>${rows.filter(r=>r.fit_parcels>0).length}</b></div>
+    <div class="stat"><span class="muted">With a paying way home</span><b>${rows.filter(best).length}</b></div>
     <div class="stat"><span class="muted">Offered to driver</span><b>${rows.filter(r=>r.offered>0).length}</b></div>
     <div class="stat"><span class="muted">Accepted</span><b>${rows.filter(r=>r.accepted>0).length}</b></div>`;
-  $("rBody").innerHTML=rows.map(r=>{const gain=r.fit_parcels?(+r.revenue)-(+r.extra_cost):null;
+  const stops=b=>b.stops.map((s,i)=>`${i?"":esc(s.from_name)+" → "}${esc(s.to_name)}<div class="plan-opt">${s.parcels?`${s.parcels} parcel${s.parcels>1?"s":""}, ${kgFmt(s.kg)} kg, ${inr(s.revenue)}`:"empty"} · ${s.km} km</div>`).join(" → ");
+  $("rBody").innerHTML=rows.map(r=>{const p=r.plan||{},b=best(r),alt=(p.options||[]).filter(o=>o!==b&&JSON.stringify(o)!==JSON.stringify(b));
     return `<tr><td><b class="mono">${esc(r.truck_no)}</b><div class="muted">${esc(r.driver_name||"")}${r.driver_phone?` · <a href="tel:${esc(r.driver_phone)}">${esc(r.driver_phone)}</a>`:""}</div></td>
     <td>${esc(r.stage)}<div class="muted" style="font-size:12px">GPS ${r.last_ping_at?ago(r.last_ping_at):"never"}</div></td>
-    <td>${esc(r.at_name)} → <b>${esc(r.home_name)}</b></td>
-    <td>${kgFmt(r.free_kg)} kg</td>
-    <td>${r.waiting_parcels} parcel${r.waiting_parcels===1?"":"s"} · ${kgFmt(r.waiting_kg)} kg</td>
-    <td>${r.fit_parcels?`${r.fit_parcels} · ${kgFmt(r.fit_kg)} kg`:"—"}</td>
-    <td>${r.fit_parcels?inr(r.revenue):"—"}</td><td>${r.fit_parcels?inr(r.extra_cost):"—"}</td><td>${r.fit_parcels?inr(r.own_truck_cost):"—"}</td>
-    <td>${gain!=null?`<b>${money(gain)}</b><div class="muted" style="font-size:12px">saves ${inr(Math.max(0,(+r.own_truck_cost)-(+r.extra_cost)))} vs own truck</div>`:"—"}</td>
-    <td>${r.accepted?`<span class="tag ok">Accepted · ${r.accepted}</span>`:r.offered?`<span class="tag warn">Offered · ${r.offered}</span>`:r.fit_parcels?'<span class="tag">Not offered</span>':'<span class="muted">Nothing waiting</span>'}</td>
-    <td>${r.fit_parcels&&!r.offered&&!r.accepted?`<button class="btn" type="button" data-offer="${esc(r.truck_no)}">Offer to driver</button>`:""}</td></tr>`}).join("")
+    <td>${b?`${b.via?'<span class="tag blue">Via '+esc(b.via_name)+"</span><br>":'<span class="tag">Direct</span><br>'}${stops(b)}`:`${esc(p.at_name||"")} → <b>${esc(p.home_name||"")}</b><div class="plan-opt">Nothing waiting on the way: drives home empty (${inr(p.empty_return_cost||0)} diesel and maintenance)</div>`}
+      ${alt.length?`<details class="plan-opt"><summary>${alt.length} other way${alt.length>1?"s":""} compared</summary>${alt.map(o=>`${o.via?"Via "+esc(o.via_name):"Direct"}: ${o.km} km, revenue ${inr(o.revenue)}, gain ${o.gain<0?"−":""}${inr(Math.abs(o.gain))}`).join("<br>")}</details>`:""}</td>
+    <td>${b?b.stops.reduce((a,s)=>a+s.parcels,0):"—"}</td>
+    <td>${b?inr(b.revenue):"—"}</td><td>${b?inr(b.fuel):"—"}</td><td>${b?inr(b.maintenance):"—"}</td><td>${b?inr(b.driver):"—"}</td>
+    <td>${b?`${inr(b.extra_cost)}<div class="plan-opt">${b.extra_km>0?"+"+b.extra_km+" km vs direct":"no extra km"}</div>`:"—"}</td>
+    <td>${b?`<b>${money(b.gain)}</b>`:"—"}</td>
+    <td>${r.accepted?`<span class="tag ok">Accepted · ${r.accepted}</span>`:r.offered?`<span class="tag warn">Offered · ${r.offered}</span>`:b?'<span class="tag">Not offered yet</span>':'<span class="muted">Nothing waiting</span>'}</td>
+    <td>${b&&!r.offered&&!r.accepted?`<button class="btn" type="button" data-offer="${esc(r.truck_no)}">Offer to driver</button>`:""}</td></tr>`}).join("")
     ||'<tr><td colspan="12" class="muted">No truck is on its way home right now. Trucks appear here from dispatch until they are back at their home warehouse.</td></tr>';
 }
 $("rBody").addEventListener("click",async e=>{const b=e.target.closest("[data-offer]");if(!b)return;b.disabled=true;
