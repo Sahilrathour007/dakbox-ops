@@ -94,6 +94,8 @@ const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},se
 
 function netErr(msg){$("net").hidden=!msg;$("net").textContent=msg||""}
 // Every database call goes through here: shows a plain message instead of "Failed to fetch".
+// optional extras (return loads, plans): never show an error or stop the page if they are not set up yet
+async function opt(promise){try{const r=await promise;return r.error?null:r.data}catch(e){return null}}
 async function q(promise){
   try{const r=await promise; if(r.error)throw r.error; netErr(""); return r.data}
   catch(e){netErr(/fetch|network/i.test(e.message||"")?"No internet connection. Retrying…":(e.message||"Something went wrong"));throw e}
@@ -168,12 +170,13 @@ async function loadJobs(){
   if(!S.truck)return;
   const today=new Date();today.setHours(0,0,0,0);
   try{[S.jobs,S.legsDone,S.backLegs]=await Promise.all([q(sb.from("orders").select("*").eq("truck_no",S.truck)),
-    q(sb.from("parcel_legs").select("awb,from_wh,to_wh,driver_pay,unloaded_at").eq("truck_no",S.truck).gte("unloaded_at",today.toISOString())),
-    q(sb.from("parcel_legs").select("awb").eq("truck_no",S.truck).eq("backhaul",true).is("unloaded_at",null))])}catch(e){return}
+    opt(sb.from("parcel_legs").select("awb,from_wh,to_wh,driver_pay,unloaded_at").eq("truck_no",S.truck).gte("unloaded_at",today.toISOString())),
+    opt(sb.from("parcel_legs").select("awb").eq("truck_no",S.truck).eq("backhaul",true).is("unloaded_at",null))])}catch(e){return}
+  S.legsDone=S.legsDone||[];S.backLegs=S.backLegs||[];
   // the return plan: the one offered (with its stops), or a preview of the way home while driving out
-  S.plan=null;try{const pl=await q(sb.from("return_plans").select("plan,created_at").eq("truck_no",S.truck).order("created_at",{ascending:false}).limit(1));S.plan=pl&&pl[0]?pl[0].plan:null}catch(e){}
-  S.preview=null;if((S.jobs||[]).some(o=>["driver_accepted","picked_up"].includes(o.status)&&!(S.backLegs||[]).some(l=>l.awb===o.awb))){try{const r=await sb.rpc("plan_return",{p_truck:S.truck});S.preview=r.data||null}catch(e){}}
-  if(!S.settings){try{const st=await q(sb.from("settings").select("offer_timeout_min").eq("id",1));S.settings=st[0]||{}}catch(e){S.settings={}}}
+  const pl=await opt(sb.from("return_plans").select("plan,created_at").eq("truck_no",S.truck).order("created_at",{ascending:false}).limit(1));S.plan=pl&&pl[0]?pl[0].plan:null;
+  S.preview=null;if((S.jobs||[]).some(o=>["driver_accepted","picked_up"].includes(o.status)&&!(S.backLegs||[]).some(l=>l.awb===o.awb)))S.preview=await opt(sb.rpc("plan_return",{p_truck:S.truck}));
+  if(!S.settings){const st=await opt(sb.from("settings").select("offer_timeout_min").eq("id",1));S.settings=(st&&st[0])||{}}
   // a new return load: buzz and show the alert once
   S.backhaul=new Set((S.backLegs||[]).map(l=>l.awb));
   const newOffers=(S.jobs||[]).filter(o=>o.status==="pickup_assigned"&&S.backhaul.has(o.awb)&&!(S.alerted||new Set()).has(o.awb));
